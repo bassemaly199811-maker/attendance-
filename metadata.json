@@ -1,0 +1,6 @@
+{
+  "name": "Work Attendance",
+  "description": "Worker Attendance and Check-in System with Bento Grid UI, GPS Geofencing, Photo Verification, and Device Authorization",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

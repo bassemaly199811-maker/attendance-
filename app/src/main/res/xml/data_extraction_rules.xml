@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Exclude Room Database and session SharedPreferences from cloud backup -->
+        <exclude domain="database" path="work_attendance_database"/>
+        <exclude domain="database" path="work_attendance_database-wal"/>
+        <exclude domain="database" path="work_attendance_database-shm"/>
+        <exclude domain="sharedpref" path="auth_session_prefs.xml"/>
+    </cloud-backup>
+    <device-transfer>
+        <!-- Exclude Room Database and session SharedPreferences from device-to-device transfers -->
+        <exclude domain="database" path="work_attendance_database"/>
+        <exclude domain="database" path="work_attendance_database-wal"/>
+        <exclude domain="database" path="work_attendance_database-shm"/>
+        <exclude domain="sharedpref" path="auth_session_prefs.xml"/>
+    </device-transfer>
+</data-extraction-rules>

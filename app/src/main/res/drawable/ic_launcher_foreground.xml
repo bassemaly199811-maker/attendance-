@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Shield / Bento Badge -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,24 C40,24 33,30 33,45 C33,65 54,84 54,84 C54,84 75,65 75,45 C75,30 68,24 54,24 Z" />
+    <!-- Inner Accent Pin / Check -->
+    <path
+        android:fillColor="#005AC1"
+        android:pathData="M54,34 C47.37,34 42,39.37 42,46 C42,50.7 44.7,54.76 48.6,56.7 L54,64 L59.4,56.7 C63.3,54.76 66,50.7 66,46 C66,39.37 60.63,34 54,34 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,49 L47,44 L48.8,42.2 L52,45.4 L59.2,38.2 L61,40 L52,49 Z" />
+</vector>
