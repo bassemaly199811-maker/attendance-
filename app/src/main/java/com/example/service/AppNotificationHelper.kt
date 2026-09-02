@@ -13,7 +13,65 @@ import com.example.R
 
 object AppNotificationHelper {
   private const val LEAVE_CHANNEL_ID = "leave_requests_channel"
+  private const val SECURITY_ALERTS_CHANNEL_ID = "security_alerts_channel"
   private const val TAG = "AppNotificationHelper"
+
+  fun sendSecurityAlertNotification(
+    context: Context,
+    workerName: String,
+    deviceModel: String,
+  ) {
+    try {
+      val intent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        putExtra("OPEN_TAB", "SECURITY_ALERTS")
+      }
+      val pendingIntent = PendingIntent.getActivity(
+        context,
+        System.currentTimeMillis().toInt(),
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+
+      val notificationManager =
+        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(
+          SECURITY_ALERTS_CHANNEL_ID,
+          "Security & Device Alerts / تنبيهات الأمان والأجهزة",
+          NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+          description = "Immediate security alerts when a worker attempts to log in from an unauthorized device"
+          enableVibration(true)
+          enableLights(true)
+        }
+        notificationManager.createNotificationChannel(channel)
+      }
+
+      val title = "🚨 Security Alert: Unauthorized Device Login / محاولة دخول غير مصرح بها"
+      val shortText = "$workerName attempted to log in from unauthorized device ($deviceModel)."
+      val detailedText = "Worker account '$workerName' attempted to log in from device '$deviceModel'. The login was blocked by security policy. Tap to review this alert in Security Alerts."
+
+      val notification = NotificationCompat.Builder(context, SECURITY_ALERTS_CHANNEL_ID)
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentTitle(title)
+        .setContentText(shortText)
+        .setStyle(
+          NotificationCompat.BigTextStyle()
+            .bigText(detailedText)
+        )
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .setContentIntent(pendingIntent)
+        .build()
+
+      notificationManager.notify((System.currentTimeMillis() % 100000).toInt() + 1000, notification)
+      Log.d(TAG, "Sent Security Alert Notification for worker $workerName on device $deviceModel")
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to send security alert notification: ${e.message}", e)
+    }
+  }
 
   fun sendAdminLeaveNotification(
     context: Context,

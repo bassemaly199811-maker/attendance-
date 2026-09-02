@@ -900,9 +900,9 @@ object CloudSyncService {
               role = role,
               workerId = doc.getString("workerId") ?: "",
               workerName = doc.getString("workerName") ?: "",
-              boundDeviceId = doc.getString("boundDeviceId") ?: "",
-              boundDeviceModel = doc.getString("boundDeviceModel") ?: "",
-              boundDeviceIp = doc.getString("boundDeviceIp") ?: "",
+              boundDeviceId = if (role == UserRole.ADMIN) "" else (doc.getString("boundDeviceId") ?: ""),
+              boundDeviceModel = if (role == UserRole.ADMIN) "" else (doc.getString("boundDeviceModel") ?: ""),
+              boundDeviceIp = if (role == UserRole.ADMIN) "" else (doc.getString("boundDeviceIp") ?: ""),
               createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
             )
           } catch (e: Exception) {

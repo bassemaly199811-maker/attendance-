@@ -779,6 +779,8 @@ private fun AdminEditLeaveDialog(
       )
     }
 
+  var formValidationError by remember { mutableStateOf<String?>(null) }
+
   AlertDialog(
     onDismissRequest = onDismiss,
     icon = {
@@ -802,6 +804,31 @@ private fun AdminEditLeaveDialog(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
+        if (formValidationError != null) {
+          item {
+            Surface(
+              shape = RoundedCornerShape(10.dp),
+              color = BentoErrorContainer,
+              border = BorderStroke(1.dp, BentoError.copy(alpha = 0.5f)),
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Row(
+                modifier = Modifier.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Icon(Icons.Default.Close, contentDescription = null, tint = BentoError, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                  text = formValidationError ?: "",
+                  color = BentoError,
+                  fontSize = 12.sp,
+                  fontWeight = FontWeight.SemiBold,
+                )
+              }
+            }
+          }
+        }
+
         item {
           Text(
             text = "Worker: ${request.workerName}",
@@ -1017,6 +1044,10 @@ private fun AdminEditLeaveDialog(
     confirmButton = {
       Button(
         onClick = {
+          if (reason.isBlank()) {
+            formValidationError = "Please enter a reason for the leave request / يرجى كتابة سبب الإجازة."
+            return@Button
+          }
           val updated = request.copy(
             leaveType = selectedType,
             startDate = startDate,

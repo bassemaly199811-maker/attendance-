@@ -22,6 +22,7 @@ import com.example.data.model.WorkerProfile
 import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.AttendanceResult
 import com.example.service.CloudSyncService
+import com.example.service.AppNotificationHelper
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -58,6 +59,7 @@ enum class LocationStatusType {
   IDLE,
   SEARCHING,
   SUCCESS,
+  WARNING,
   ERROR,
 }
 
@@ -139,6 +141,7 @@ data class AttendanceUiState(
   val showLeaveSuccessPopup: Boolean = false,
   val isSubmittingLeave: Boolean = false,
   val leaveSubmissionErrorMessage: String? = null,
+  val userManagementInitialTab: Int = 0,
 )
 
 val CHECKOUT_ENCOURAGEMENT_QUOTES = listOf(
@@ -580,6 +583,16 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             ),
           )
         )
+      }
+
+      // Ensure any existing admin accounts have no single-device hardware lock
+      try {
+        val existingUsers = repository.attendanceDao.getAllUsersDirect()
+        existingUsers.filter { it.role == UserRole.ADMIN && it.boundDeviceId.isNotBlank() }.forEach { adminUser ->
+          repository.updateUser(adminUser.copy(boundDeviceId = "", boundDeviceModel = "", boundDeviceIp = ""))
+        }
+      } catch (e: Exception) {
+        Log.e("AttendanceViewModel", "Failed to sanitize admin devices: ${e.message}")
       }
     }
   }
@@ -1461,7 +1474,18 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
   }
 
   fun setTab(tab: BentoTab) {
-    _uiState.value = _uiState.value.copy(currentTab = tab)
+    if (tab != BentoTab.USER_MANAGEMENT) {
+      _uiState.value = _uiState.value.copy(currentTab = tab, userManagementInitialTab = 0)
+    } else {
+      _uiState.value = _uiState.value.copy(currentTab = tab)
+    }
+  }
+
+  fun openUserManagementTab(initialSubTab: Int = 0) {
+    _uiState.value = _uiState.value.copy(
+      currentTab = BentoTab.USER_MANAGEMENT,
+      userManagementInitialTab = initialSubTab,
+    )
   }
 
   fun selectSite(site: WorkSite) {
@@ -1547,6 +1571,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       com.example.service.LocationHelper.searchLocationWithDiagnostics(
         context = context,
         isOnline = online,
+        timeoutMillis = 12000L,
         onResult = { result ->
           when (result) {
             is com.example.service.LocationHelper.LocationSearchResult.Success -> {
@@ -1565,21 +1590,39 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                   realDist
                 }
 
-              _uiState.value = _uiState.value.copy(
-                deviceLatitude = coords.latitude,
-                deviceLongitude = coords.longitude,
-                accuracyMeters = coords.accuracy,
-                isDeviceLocationReady = true,
-                currentDistanceMeters = distance,
-                isInsideGeofence = distance <= site.radiusMeters,
-                isSearchingLocation = false,
-                locationStatusType = LocationStatusType.SUCCESS,
-                locationSearchSuccess = result.message,
-                locationSearchStatus = result.message,
-                locationSearchError = null,
-                locationProviderName = coords.provider,
-                lastLocationSearchTimestamp = System.currentTimeMillis(),
-              )
+              if (result.isRealGps) {
+                _uiState.value = _uiState.value.copy(
+                  deviceLatitude = coords.latitude,
+                  deviceLongitude = coords.longitude,
+                  accuracyMeters = coords.accuracy,
+                  isDeviceLocationReady = true,
+                  currentDistanceMeters = distance,
+                  isInsideGeofence = distance <= site.radiusMeters,
+                  isSearchingLocation = false,
+                  locationStatusType = LocationStatusType.SUCCESS,
+                  locationSearchSuccess = result.message,
+                  locationSearchStatus = result.message,
+                  locationSearchError = null,
+                  locationProviderName = coords.provider,
+                  lastLocationSearchTimestamp = System.currentTimeMillis(),
+                )
+              } else {
+                _uiState.value = _uiState.value.copy(
+                  deviceLatitude = coords.latitude,
+                  deviceLongitude = coords.longitude,
+                  accuracyMeters = coords.accuracy,
+                  isDeviceLocationReady = true,
+                  currentDistanceMeters = distance,
+                  isInsideGeofence = distance <= site.radiusMeters,
+                  isSearchingLocation = false,
+                  locationStatusType = LocationStatusType.WARNING,
+                  locationSearchSuccess = null,
+                  locationSearchStatus = "Approximate/fallback location used — please verify manually.",
+                  locationSearchError = "Approximate/fallback location used — please verify manually.",
+                  locationProviderName = coords.provider,
+                  lastLocationSearchTimestamp = System.currentTimeMillis(),
+                )
+              }
             }
             is com.example.service.LocationHelper.LocationSearchResult.Failure -> {
               if (result.fallbackCoordinates != null) {
@@ -2333,8 +2376,16 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       val currentDeviceModel = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}"
       val currentDeviceId = "DEV-${android.os.Build.ID.hashCode().toString().replace("-", "").take(6)}"
 
+      val isAdmin = user.role == UserRole.ADMIN
+
       // Device Binding Verification
-      if (user.boundDeviceId.isNotBlank() && user.boundDeviceId != currentDeviceId && user.boundDeviceModel != currentDeviceModel) {
+      // Workers can only log in from their first-registered device.
+      // If a worker attempts to log in from a different device, report mismatch, notify admin, and block access.
+      // ADMIN accounts are exempt from single-device binding and can log in from any device.
+      val isDeviceMismatch = !isAdmin && user.boundDeviceId.isNotBlank() &&
+        (user.boundDeviceId != currentDeviceId || (user.boundDeviceModel.isNotBlank() && user.boundDeviceModel != currentDeviceModel))
+
+      if (isDeviceMismatch) {
         repository.reportDeviceMismatch(
           username = user.username,
           workerId = user.workerId,
@@ -2342,15 +2393,32 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
           attemptedDeviceModel = currentDeviceModel,
           attemptedDeviceId = currentDeviceId,
         )
+
+        // Trigger system notification to administrator alerting them of the unauthorized attempt
+        AppNotificationHelper.sendSecurityAlertNotification(
+          context = getApplication(),
+          workerName = user.workerName.ifBlank { user.username },
+          deviceModel = currentDeviceModel,
+        )
+
         _uiState.value = _uiState.value.copy(
           isLoginProcessing = false,
-          loginSecurityAlertMessage = "Hardware Mismatch: This account is locked to device (${user.boundDeviceModel}). Contact your administrator to unbind previous hardware.",
+          loginSecurityAlertMessage = "Hardware Mismatch: This account is locked to device (${user.boundDeviceModel.ifBlank { user.boundDeviceId }}). Contact your administrator to unbind previous hardware.",
         )
         return@launch
       }
 
-      // If user hasn't bound a device yet, automatically bind to this device
-      val effectiveUser = if (user.boundDeviceId.isBlank()) {
+      // If user is ADMIN, ensure no device hardware lock is enforced (clear binding if previously set)
+      // If user is WORKER and hasn't bound a device yet, automatically bind to this device
+      val effectiveUser = if (isAdmin) {
+        if (user.boundDeviceId.isNotBlank() || user.boundDeviceModel.isNotBlank()) {
+          val unboundAdmin = user.copy(boundDeviceId = "", boundDeviceModel = "", boundDeviceIp = "")
+          repository.updateUser(unboundAdmin)
+          unboundAdmin
+        } else {
+          user
+        }
+      } else if (user.boundDeviceId.isBlank()) {
         val bound = user.copy(boundDeviceId = currentDeviceId, boundDeviceModel = currentDeviceModel)
         repository.updateUser(bound)
         bound
@@ -2433,7 +2501,12 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
 
   fun addUser(user: UserAccount) {
     viewModelScope.launch {
-      val secureUser = user.copy(passwordHash = hashPasswordIfNeeded(user.passwordHash))
+      val sanitized = if (user.role == UserRole.ADMIN) {
+        user.copy(boundDeviceId = "", boundDeviceModel = "", boundDeviceIp = "")
+      } else {
+        user
+      }
+      val secureUser = sanitized.copy(passwordHash = hashPasswordIfNeeded(sanitized.passwordHash))
       repository.addUser(secureUser)
       _uiState.value = _uiState.value.copy(
         notificationMessage = "User @${user.username} created successfully ✓",
@@ -2444,7 +2517,12 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
 
   fun updateUser(user: UserAccount) {
     viewModelScope.launch {
-      val secureUser = user.copy(passwordHash = hashPasswordIfNeeded(user.passwordHash))
+      val sanitized = if (user.role == UserRole.ADMIN) {
+        user.copy(boundDeviceId = "", boundDeviceModel = "", boundDeviceIp = "")
+      } else {
+        user
+      }
+      val secureUser = sanitized.copy(passwordHash = hashPasswordIfNeeded(sanitized.passwordHash))
       repository.updateUser(secureUser)
       if (_uiState.value.currentUserAccount?.username == secureUser.username) {
         _uiState.value = _uiState.value.copy(currentUserAccount = secureUser)

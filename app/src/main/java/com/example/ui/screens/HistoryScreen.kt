@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -39,6 +40,9 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.EventNote
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
@@ -92,6 +96,7 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -99,6 +104,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.bounceClick
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.data.model.AttendanceRecord
@@ -177,6 +183,29 @@ fun isDateWithinDays(dateString: String, days: Int): Boolean {
   }
 }
 
+fun isDateBetween(dateString: String, startDate: String, endDate: String): Boolean {
+  return try {
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
+    val d = sdf.parse(dateString) ?: return false
+    val start = if (startDate.isNotBlank()) sdf.parse(startDate) else null
+    val end = if (endDate.isNotBlank()) sdf.parse(endDate) else null
+    (start == null || !d.before(start)) && (end == null || !d.after(end))
+  } catch (e: Exception) {
+    true
+  }
+}
+
+enum class ExportPeriodPreset(val labelEn: String, val labelAr: String) {
+  ALL("All Records", "كل السجلات"),
+  TODAY("Today", "اليوم"),
+  YESTERDAY("Yesterday", "أمس"),
+  LAST_7_DAYS("Last 7 Days", "آخر 7 أيام"),
+  THIS_MONTH("This Month", "الشهر الحالي"),
+  LAST_MONTH("Last Month", "الشهر الماضي"),
+  LAST_30_DAYS("Last 30 Days", "آخر 30 يوماً"),
+  CUSTOM("Custom Range", "فترة مخصصة"),
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
@@ -195,6 +224,7 @@ fun HistoryScreen(
   var selectedPhotoDialog by remember { mutableStateOf<PhotoDialogData?>(null) }
   var recordToDelete by remember { mutableStateOf<AttendanceRecord?>(null) }
   var showAddRecordDialog by remember { mutableStateOf(false) }
+  var showExportPeriodDialog by remember { mutableStateOf(false) }
   var visibleCount by remember { mutableIntStateOf(5) }
   var isLoadingMore by remember { mutableStateOf(false) }
   var isExportingCsv by remember { mutableStateOf(false) }
@@ -280,9 +310,12 @@ fun HistoryScreen(
     filteredRecords.take(visibleCount)
   }
 
-  fun handleExportCsv() {
-    if (filteredRecords.isEmpty()) {
-      exportErrorMessage = "No attendance records found to export for current filter."
+  fun handleExportCsv(
+    recordsToExport: List<AttendanceRecord> = filteredRecords,
+    periodLabel: String = "Selected Records",
+  ) {
+    if (recordsToExport.isEmpty()) {
+      exportErrorMessage = "No attendance records found to export for selected period."
       return
     }
     exportErrorMessage = null
@@ -290,13 +323,13 @@ fun HistoryScreen(
     coroutineScope.launch {
       try {
         val uri = withContext(Dispatchers.IO) {
-          exportAttendanceToCsv(context, filteredRecords)
+          exportAttendanceToCsv(context, recordsToExport)
         }
         isExportingCsv = false
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
           type = "text/csv"
-          putExtra(Intent.EXTRA_SUBJECT, "Attendance Records Export - $todayStr")
-          putExtra(Intent.EXTRA_TEXT, "Exported attendance records (${filteredRecords.size} records) from Work Attendance.")
+          putExtra(Intent.EXTRA_SUBJECT, "Attendance Records Export ($periodLabel) - $todayStr")
+          putExtra(Intent.EXTRA_TEXT, "Exported attendance records ($periodLabel - ${recordsToExport.size} records) from Work Attendance.")
           putExtra(Intent.EXTRA_STREAM, uri)
           addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -320,77 +353,93 @@ fun HistoryScreen(
     ) {
       Spacer(modifier = Modifier.height(4.dp))
 
-      // 1. Header: Title, Count, Cloud Refresh
+      // 1. Header: Title at top, Action Buttons below with improved spacing
       Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(top = 10.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
+        // Top Row: "Attendance Log" Title and Record Count
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.weight(1f, fill = false),
-          ) {
+          Column(modifier = Modifier.weight(1f, fill = false)) {
             Text(
               text = "Attendance Log",
-              fontSize = 20.sp,
-              fontWeight = FontWeight.Bold,
+              fontSize = 22.sp,
+              fontWeight = FontWeight.ExtraBold,
               color = Color.Black,
+              letterSpacing = (-0.3).sp,
             )
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = BentoSuccessContainer,
-            ) {
-              Text(
-                text = "${filteredRecords.size} / ${records.size} Records",
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = BentoSuccess,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                maxLines = 1,
-              )
-            }
+            Text(
+              text = if (isAdmin) "Filter daily logs, review records, and export CSV reports" else "Your verified daily logs and working hours",
+              fontSize = 12.sp,
+              color = BentoTextSecondary,
+              modifier = Modifier.padding(top = 2.dp),
+            )
           }
 
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+          Spacer(modifier = Modifier.width(8.dp))
+
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = BentoSuccessContainer,
+            border = BorderStroke(1.dp, BentoSuccess.copy(alpha = 0.35f)),
           ) {
-            // Export CSV Button
+            Text(
+              text = "${filteredRecords.size} / ${records.size} Records",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.Bold,
+              color = BentoSuccess,
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+              maxLines = 1,
+            )
+          }
+        }
+
+        // Action Buttons Row directly below the Attendance Log title
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          // Export CSV Button (Admin Only - Removed for workers)
+          if (isAdmin) {
             Surface(
-              shape = RoundedCornerShape(50.dp),
+              shape = RoundedCornerShape(12.dp),
               color = BentoLilac,
-              border = BorderStroke(1.dp, BentoLilacText.copy(alpha = 0.3f)),
+              border = BorderStroke(1.dp, BentoLilacText.copy(alpha = 0.35f)),
               modifier = Modifier
-                .clickable(enabled = !isExportingCsv) { handleExportCsv() }
+                .bounceClick(scaleDown = 0.94f, enabled = !isExportingCsv) {
+                  showExportPeriodDialog = true
+                }
                 .testTag("export_csv_button"),
             ) {
               Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
               ) {
                 if (isExportingCsv) {
                   CircularProgressIndicator(
-                    modifier = Modifier.size(13.dp),
+                    modifier = Modifier.size(14.dp),
                     color = BentoLilacText,
                     strokeWidth = 2.dp,
                   )
                 } else {
                   Icon(
-                    imageVector = Icons.Default.Share,
+                    imageVector = Icons.Default.FileDownload,
                     contentDescription = "Export CSV",
                     tint = BentoLilacText,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(16.dp),
                   )
                 }
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                   text = if (isExportingCsv) "Exporting..." else "Export CSV",
-                  fontSize = 11.sp,
+                  fontSize = 12.sp,
                   fontWeight = FontWeight.Bold,
                   color = BentoLilacText,
                   maxLines = 1,
@@ -399,76 +448,69 @@ fun HistoryScreen(
             }
 
             // Add Manual Attendance Record Button (Admin Only)
-            if (isAdmin) {
-              Surface(
-                shape = RoundedCornerShape(50.dp),
-                color = BentoBluePrimary,
-                modifier = Modifier.clickable { showAddRecordDialog = true },
-              ) {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                  Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add Record",
-                    tint = Color.White,
-                    modifier = Modifier.size(15.dp),
-                  )
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text(
-                    text = "Add Record",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                  )
-                }
-              }
-            }
-
-            // Cloud Sync / Refresh Button
             Surface(
-              shape = RoundedCornerShape(50.dp),
-              color = BentoBlueContainer,
-              modifier = Modifier.clickable { onRefresh() },
+              shape = RoundedCornerShape(12.dp),
+              color = BentoBluePrimary,
+              modifier = Modifier.bounceClick(scaleDown = 0.94f) { showAddRecordDialog = true },
             ) {
               Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
               ) {
-                if (isRefreshing) {
-                  CircularProgressIndicator(
-                    modifier = Modifier.size(13.dp),
-                    color = BentoBluePrimary,
-                    strokeWidth = 2.dp,
-                  )
-                } else {
-                  Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Cloud Refresh",
-                    tint = BentoBluePrimary,
-                    modifier = Modifier.size(15.dp),
-                  )
-                }
-                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                  imageVector = Icons.Default.Add,
+                  contentDescription = "Add Record",
+                  tint = Color.White,
+                  modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                  text = if (isRefreshing) "Syncing..." else "Cloud Sync",
-                  fontSize = 11.sp,
+                  text = "Add Record",
+                  fontSize = 12.sp,
                   fontWeight = FontWeight.Bold,
-                  color = BentoBluePrimary,
+                  color = Color.White,
                   maxLines = 1,
                 )
               }
             }
           }
-        }
 
-        Text(
-          text = if (isAdmin) "Filter daily logs by worker name, date range, and export attendance logs to CSV" else "Your verified daily logs and working hours",
-          fontSize = 12.sp,
-          color = BentoTextSecondary,
-        )
+          // Cloud Sync / Refresh Button (For both Admin & Worker)
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = BentoBlueContainer,
+            border = BorderStroke(1.dp, BentoBluePrimary.copy(alpha = 0.25f)),
+            modifier = Modifier.clickable { onRefresh() },
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+              if (isRefreshing) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(14.dp),
+                  color = BentoBluePrimary,
+                  strokeWidth = 2.dp,
+                )
+              } else {
+                Icon(
+                  imageVector = Icons.Default.Refresh,
+                  contentDescription = "Cloud Refresh",
+                  tint = BentoBluePrimary,
+                  modifier = Modifier.size(16.dp),
+                )
+              }
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = if (isRefreshing) "Syncing..." else "Cloud Sync",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = BentoBluePrimary,
+                maxLines = 1,
+              )
+            }
+          }
+        }
 
         // Error message banner if export or any operation fails
         if (exportErrorMessage != null) {
@@ -1213,6 +1255,23 @@ fun HistoryScreen(
       },
     )
   }
+
+  // Export CSV Period Selection Dialog (Admin Only)
+  if (showExportPeriodDialog) {
+    ExportPeriodSelectionDialog(
+      records = records,
+      distinctWorkers = distinctWorkers,
+      todayStr = todayStr,
+      yesterdayStr = yesterdayStr,
+      currentMonthStr = currentMonthStr,
+      lastMonthStr = lastMonthStr,
+      onDismiss = { showExportPeriodDialog = false },
+      onExport = { recordsToExport, periodLabel ->
+        showExportPeriodDialog = false
+        handleExportCsv(recordsToExport, periodLabel)
+      },
+    )
+  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1237,6 +1296,7 @@ fun AddManualAttendanceDialog(
 
   var isWorkerMenuExpanded by remember { mutableStateOf(false) }
   var isSiteMenuExpanded by remember { mutableStateOf(false) }
+  var formValidationError by remember { mutableStateOf<String?>(null) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -1256,6 +1316,29 @@ fun AddManualAttendanceDialog(
           .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
+        if (formValidationError != null) {
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = BentoErrorContainer,
+            border = BorderStroke(1.dp, BentoError.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Row(
+              modifier = Modifier.padding(10.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Icon(Icons.Default.WarningAmber, contentDescription = null, tint = BentoError, modifier = Modifier.size(18.dp))
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = formValidationError ?: "",
+                color = BentoError,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+              )
+            }
+          }
+        }
+
         Text(
           text = "Add an attendance record by specifying worker, location, and work hours:",
           fontSize = 12.sp,
@@ -1270,7 +1353,10 @@ fun AddManualAttendanceDialog(
         ) {
           OutlinedTextField(
             value = workerName,
-            onValueChange = { workerName = it },
+            onValueChange = {
+              workerName = it
+              formValidationError = null
+            },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isWorkerMenuExpanded) },
             leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = BentoBluePrimary, modifier = Modifier.size(18.dp)) },
             modifier = Modifier.menuAnchor().fillMaxWidth(),
@@ -1455,7 +1541,19 @@ fun AddManualAttendanceDialog(
     confirmButton = {
       Button(
         onClick = {
-          val cleanWorkerName = workerName.trim().ifBlank { "Employee" }
+          if (workerName.isBlank()) {
+            formValidationError = "Please select or enter the worker name."
+            return@Button
+          }
+          if (workDate.isBlank() || checkInTime.isBlank()) {
+            formValidationError = "Please fill in work date and check-in time."
+            return@Button
+          }
+          if (isCheckedOut && checkOutTime.isBlank()) {
+            formValidationError = "Please fill in check-out time."
+            return@Button
+          }
+          val cleanWorkerName = workerName.trim()
           val cleanSite = siteName.trim().ifBlank { "Main Site" }
           val record = AttendanceRecord(
             workDate = workDate.trim().ifBlank { todayFormatted },
@@ -1472,7 +1570,7 @@ fun AddManualAttendanceDialog(
         },
         colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
         shape = RoundedCornerShape(10.dp),
-        enabled = workerName.isNotBlank(),
+        enabled = true,
       ) {
         Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
         Spacer(modifier = Modifier.width(6.dp))
@@ -1517,7 +1615,10 @@ fun BentoHistoryCard(
     else "Incomplete"
 
   Card(
-    modifier = modifier.fillMaxWidth(),
+    modifier = modifier
+      .fillMaxWidth()
+      .shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp), spotColor = Color.Black.copy(alpha = 0.05f))
+      .bounceClick(scaleDown = 0.99f) {},
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = Color.White),
     border = BorderStroke(1.dp, BentoOutline),
@@ -1722,7 +1823,7 @@ fun BentoHistoryCard(
                 .clip(RoundedCornerShape(10.dp))
                 .background(Color.White)
                 .border(1.dp, BentoOutline, RoundedCornerShape(10.dp))
-                .clickable { onCheckInPhotoClick() },
+                .bounceClick(scaleDown = 0.94f) { onCheckInPhotoClick() },
             contentAlignment = Alignment.Center,
           ) {
             if (checkInBitmap != null) {
@@ -1855,7 +1956,7 @@ fun BentoHistoryCard(
                 .clip(RoundedCornerShape(10.dp))
                 .background(Color.White)
                 .border(1.dp, BentoOutline, RoundedCornerShape(10.dp))
-                .clickable { onCheckOutPhotoClick() },
+                .bounceClick(scaleDown = 0.94f) { onCheckOutPhotoClick() },
             contentAlignment = Alignment.Center,
           ) {
             if (checkOutBitmap != null) {
@@ -1967,4 +2068,439 @@ fun BentoHistoryCard(
       }
     }
   }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExportPeriodSelectionDialog(
+  records: List<AttendanceRecord>,
+  distinctWorkers: List<String>,
+  todayStr: String,
+  yesterdayStr: String,
+  currentMonthStr: String,
+  lastMonthStr: String,
+  onDismiss: () -> Unit,
+  onExport: (recordsToExport: List<AttendanceRecord>, periodLabel: String) -> Unit,
+) {
+  val context = LocalContext.current
+  var selectedPeriod by remember { mutableStateOf(ExportPeriodPreset.ALL) }
+  var selectedWorker by remember { mutableStateOf("ALL") }
+  var customStartDate by remember { mutableStateOf(todayStr) }
+  var customEndDate by remember { mutableStateOf(todayStr) }
+  var isWorkerDropdownExpanded by remember { mutableStateOf(false) }
+
+  // Date picker dialog helpers
+  fun openStartDatePicker() {
+    val cal = Calendar.getInstance()
+    try {
+      val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).parse(customStartDate)
+      if (parsed != null) cal.time = parsed
+    } catch (_: Exception) {}
+    DatePickerDialog(
+      context,
+      { _, y, m, d ->
+        val c = Calendar.getInstance().apply { set(y, m, d) }
+        customStartDate = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(c.time)
+      },
+      cal.get(Calendar.YEAR),
+      cal.get(Calendar.MONTH),
+      cal.get(Calendar.DAY_OF_MONTH),
+    ).show()
+  }
+
+  fun openEndDatePicker() {
+    val cal = Calendar.getInstance()
+    try {
+      val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).parse(customEndDate)
+      if (parsed != null) cal.time = parsed
+    } catch (_: Exception) {}
+    DatePickerDialog(
+      context,
+      { _, y, m, d ->
+        val c = Calendar.getInstance().apply { set(y, m, d) }
+        customEndDate = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(c.time)
+      },
+      cal.get(Calendar.YEAR),
+      cal.get(Calendar.MONTH),
+      cal.get(Calendar.DAY_OF_MONTH),
+    ).show()
+  }
+
+  // Filter records dynamically based on selected duration and worker
+  val filteredExportRecords = remember(records, selectedPeriod, selectedWorker, customStartDate, customEndDate) {
+    records.filter { rec ->
+      val matchesWorker = if (selectedWorker == "ALL") true else rec.workerName.equals(selectedWorker, ignoreCase = true)
+      val matchesPeriod = when (selectedPeriod) {
+        ExportPeriodPreset.ALL -> true
+        ExportPeriodPreset.TODAY -> rec.workDate == todayStr
+        ExportPeriodPreset.YESTERDAY -> rec.workDate == yesterdayStr
+        ExportPeriodPreset.LAST_7_DAYS -> isDateWithinDays(rec.workDate, 7)
+        ExportPeriodPreset.THIS_MONTH -> rec.workDate.startsWith(currentMonthStr)
+        ExportPeriodPreset.LAST_MONTH -> rec.workDate.startsWith(lastMonthStr)
+        ExportPeriodPreset.LAST_30_DAYS -> isDateWithinDays(rec.workDate, 30)
+        ExportPeriodPreset.CUSTOM -> isDateBetween(rec.workDate, customStartDate, customEndDate)
+      }
+      matchesWorker && matchesPeriod
+    }
+  }
+
+  val periodLabel = remember(selectedPeriod, customStartDate, customEndDate) {
+    when (selectedPeriod) {
+      ExportPeriodPreset.ALL -> "All Records"
+      ExportPeriodPreset.TODAY -> "Today ($todayStr)"
+      ExportPeriodPreset.YESTERDAY -> "Yesterday ($yesterdayStr)"
+      ExportPeriodPreset.LAST_7_DAYS -> "Last 7 Days"
+      ExportPeriodPreset.THIS_MONTH -> "Current Month ($currentMonthStr)"
+      ExportPeriodPreset.LAST_MONTH -> "Last Month ($lastMonthStr)"
+      ExportPeriodPreset.LAST_30_DAYS -> "Last 30 Days"
+      ExportPeriodPreset.CUSTOM -> "$customStartDate to $customEndDate"
+    }
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    containerColor = Color.White,
+    titleContentColor = Color.Black,
+    textContentColor = Color.Black,
+    title = {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        Surface(
+          shape = CircleShape,
+          color = BentoLilac,
+          modifier = Modifier.size(40.dp),
+        ) {
+          Box(contentAlignment = Alignment.Center) {
+            Icon(
+              imageVector = Icons.Default.FileDownload,
+              contentDescription = null,
+              tint = BentoLilacText,
+              modifier = Modifier.size(22.dp),
+            )
+          }
+        }
+        Column {
+          Text(
+            text = "Export Attendance to CSV",
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black,
+          )
+          Text(
+            text = "تحديد مدة تصدير سجلات الحضور",
+            fontSize = 12.sp,
+            color = BentoTextSecondary,
+          )
+        }
+      }
+    },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+      ) {
+        // 1. Period Selection Header
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text(
+            text = "Select Duration / حدد الفترة الزمنية:",
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black,
+          )
+
+          // Duration Presets Grid
+          Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val presets = listOf(
+              ExportPeriodPreset.ALL,
+              ExportPeriodPreset.TODAY,
+              ExportPeriodPreset.YESTERDAY,
+              ExportPeriodPreset.LAST_7_DAYS,
+              ExportPeriodPreset.THIS_MONTH,
+              ExportPeriodPreset.LAST_MONTH,
+              ExportPeriodPreset.LAST_30_DAYS,
+              ExportPeriodPreset.CUSTOM,
+            )
+
+            presets.chunked(2).forEach { rowPresets ->
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+              ) {
+                rowPresets.forEach { preset ->
+                  val isSelected = selectedPeriod == preset
+                  Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) BentoBluePrimary else Color(0xFFF6F8FA),
+                    border = BorderStroke(
+                      1.dp,
+                      if (isSelected) BentoBluePrimary else Color(0xFFE2E8F0),
+                    ),
+                    modifier = Modifier
+                      .weight(1f)
+                      .clickable { selectedPeriod = preset },
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                      Column(modifier = Modifier.weight(1f, fill = false)) {
+                        Text(
+                          text = preset.labelEn,
+                          fontSize = 11.5.sp,
+                          fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                          color = if (isSelected) Color.White else Color.Black,
+                          maxLines = 1,
+                        )
+                        Text(
+                          text = preset.labelAr,
+                          fontSize = 10.sp,
+                          color = if (isSelected) Color.White.copy(alpha = 0.85f) else BentoTextSecondary,
+                          maxLines = 1,
+                        )
+                      }
+                      if (isSelected) {
+                        Icon(
+                          imageVector = Icons.Default.Check,
+                          contentDescription = null,
+                          tint = Color.White,
+                          modifier = Modifier.size(14.dp),
+                        )
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // 2. Custom Date Range Pickers (Visible when CUSTOM is selected)
+        if (selectedPeriod == ExportPeriodPreset.CUSTOM) {
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFFF8FAFC),
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(
+              modifier = Modifier.padding(10.dp),
+              verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Text(
+                text = "Custom Range / من تاريخ إلى تاريخ:",
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = BentoBluePrimary,
+              )
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                // Start Date
+                Surface(
+                  shape = RoundedCornerShape(8.dp),
+                  color = Color.White,
+                  border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                  modifier = Modifier
+                    .weight(1f)
+                    .clickable { openStartDatePicker() },
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                  ) {
+                    Icon(
+                      imageVector = Icons.Default.CalendarToday,
+                      contentDescription = "From Date",
+                      tint = BentoBluePrimary,
+                      modifier = Modifier.size(16.dp),
+                    )
+                    Column {
+                      Text("From (من)", fontSize = 9.5.sp, color = BentoTextSecondary)
+                      Text(
+                        text = customStartDate,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                      )
+                    }
+                  }
+                }
+
+                // End Date
+                Surface(
+                  shape = RoundedCornerShape(8.dp),
+                  color = Color.White,
+                  border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                  modifier = Modifier
+                    .weight(1f)
+                    .clickable { openEndDatePicker() },
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                  ) {
+                    Icon(
+                      imageVector = Icons.Default.CalendarToday,
+                      contentDescription = "To Date",
+                      tint = BentoBluePrimary,
+                      modifier = Modifier.size(16.dp),
+                    )
+                    Column {
+                      Text("To (إلى)", fontSize = 9.5.sp, color = BentoTextSecondary)
+                      Text(
+                        text = customEndDate,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                      )
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // 3. Worker Scope Selection
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Text(
+            text = "Worker Scope / العمال المراد تصديرهم:",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black,
+          )
+
+          ExposedDropdownMenuBox(
+            expanded = isWorkerDropdownExpanded,
+            onExpandedChange = { isWorkerDropdownExpanded = !isWorkerDropdownExpanded },
+          ) {
+            OutlinedTextField(
+              value = if (selectedWorker == "ALL") "All Workers (جميع العمال)" else selectedWorker,
+              onValueChange = {},
+              readOnly = true,
+              trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isWorkerDropdownExpanded) },
+              modifier = Modifier.menuAnchor().fillMaxWidth(),
+              shape = RoundedCornerShape(10.dp),
+              colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.Black,
+                unfocusedTextColor = Color.Black,
+                focusedBorderColor = BentoBluePrimary,
+                unfocusedBorderColor = Color(0xFFE2E8F0),
+                focusedContainerColor = BentoTileGray,
+                unfocusedContainerColor = BentoTileGray,
+              ),
+              textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+            )
+
+            ExposedDropdownMenu(
+              expanded = isWorkerDropdownExpanded,
+              onDismissRequest = { isWorkerDropdownExpanded = false },
+              modifier = Modifier.background(Color.White),
+            ) {
+              DropdownMenuItem(
+                text = { Text("All Workers (جميع العمال)", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                onClick = {
+                  selectedWorker = "ALL"
+                  isWorkerDropdownExpanded = false
+                },
+              )
+              distinctWorkers.forEach { worker ->
+                DropdownMenuItem(
+                  text = { Text(worker, fontSize = 12.sp) },
+                  onClick = {
+                    selectedWorker = worker
+                    isWorkerDropdownExpanded = false
+                  },
+                )
+              }
+            }
+          }
+        }
+
+        // 4. Live Record Count Summary Card
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = if (filteredExportRecords.isNotEmpty()) BentoSuccessContainer.copy(alpha = 0.5f) else BentoWarningContainer.copy(alpha = 0.5f),
+          border = BorderStroke(
+            1.dp,
+            if (filteredExportRecords.isNotEmpty()) BentoSuccess.copy(alpha = 0.3f) else BentoWarning.copy(alpha = 0.3f),
+          ),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              Icon(
+                imageVector = if (filteredExportRecords.isNotEmpty()) Icons.Default.CheckCircle else Icons.Default.WarningAmber,
+                contentDescription = null,
+                tint = if (filteredExportRecords.isNotEmpty()) BentoSuccess else BentoWarning,
+                modifier = Modifier.size(16.dp),
+              )
+              Text(
+                text = if (filteredExportRecords.isNotEmpty()) {
+                  "Ready to export: ${filteredExportRecords.size} records"
+                } else {
+                  "No records match this duration"
+                },
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (filteredExportRecords.isNotEmpty()) BentoSuccess else BentoWarning,
+              )
+            }
+            Text(
+              text = "Scope: $periodLabel • ${if (selectedWorker == "ALL") "All Workers" else selectedWorker}",
+              fontSize = 10.5.sp,
+              color = BentoTextSecondary,
+            )
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          onExport(filteredExportRecords, periodLabel)
+        },
+        enabled = filteredExportRecords.isNotEmpty(),
+        colors = ButtonDefaults.buttonColors(
+          containerColor = BentoBluePrimary,
+          disabledContainerColor = BentoBluePrimary.copy(alpha = 0.4f),
+        ),
+        shape = RoundedCornerShape(10.dp),
+      ) {
+        Icon(
+          imageVector = Icons.Default.FileDownload,
+          contentDescription = null,
+          tint = Color.White,
+          modifier = Modifier.size(16.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = "Export CSV (${filteredExportRecords.size})",
+          fontSize = 12.5.sp,
+          fontWeight = FontWeight.Bold,
+          color = Color.White,
+        )
+      }
+    },
+    dismissButton = {
+      TextButton(
+        onClick = onDismiss,
+        shape = RoundedCornerShape(10.dp),
+      ) {
+        Text("Cancel / إلغاء", color = Color.Black, fontSize = 12.sp)
+      }
+    },
+  )
 }

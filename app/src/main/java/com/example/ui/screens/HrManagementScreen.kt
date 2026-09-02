@@ -100,7 +100,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.example.util.exportAttendanceToCsv
 import com.example.ui.components.EditWorkerLeaveBalanceDialog
-import com.example.ui.components.AdminSitePickerMap
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -3084,6 +3085,7 @@ fun WorkerFormDialog(
     }
   }
   var selectedSiteIds by remember { mutableStateOf(initialSiteIds.toSet()) }
+  var formValidationError by remember { mutableStateOf<String?>(null) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -3106,6 +3108,29 @@ fun WorkerFormDialog(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
       ) {
+        if (formValidationError != null) {
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFFFFEBEE),
+            border = BorderStroke(1.dp, BentoError.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Row(
+              modifier = Modifier.padding(10.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Icon(Icons.Default.Warning, contentDescription = null, tint = BentoError, modifier = Modifier.size(18.dp))
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = formValidationError ?: "",
+                color = BentoError,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+              )
+            }
+          }
+        }
+
         // 1. Basic Info Section
         Surface(
           shape = RoundedCornerShape(12.dp),
@@ -3118,7 +3143,10 @@ fun WorkerFormDialog(
             
             OutlinedTextField(
               value = fullName,
-              onValueChange = { fullName = it },
+              onValueChange = {
+                fullName = it
+                formValidationError = null
+              },
               label = { Text("Worker Full Name *", fontSize = 11.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
               textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
               colors = OutlinedTextFieldDefaults.colors(
@@ -3729,9 +3757,11 @@ fun WorkerFormDialog(
               finalCasualLeaves,
               finalSickLeaves,
             )
+          } else {
+            formValidationError = "Please enter the Worker Full Name / اسم العامل مطلوب."
           }
         },
-        enabled = fullName.isNotBlank(),
+        enabled = true,
         colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
       ) {
         Text("Save Staff Profile")
@@ -3761,8 +3791,18 @@ fun WorkSiteFormDialog(
 ) {
   val context = LocalContext.current
   var name by remember { mutableStateOf(initialSite?.name ?: "") }
-  var latStr by remember { mutableStateOf(initialSite?.latitude?.toString() ?: "21.543333") }
-  var lngStr by remember { mutableStateOf(initialSite?.longitude?.toString() ?: "39.172778") }
+  var latStr by remember {
+    mutableStateOf(
+      initialSite?.latitude?.let { String.format(Locale.ENGLISH, "%.6f", it) }
+        ?: if (isLocationReady && currentDeviceLat != 0.0) String.format(Locale.ENGLISH, "%.6f", currentDeviceLat) else ""
+    )
+  }
+  var lngStr by remember {
+    mutableStateOf(
+      initialSite?.longitude?.let { String.format(Locale.ENGLISH, "%.6f", it) }
+        ?: if (isLocationReady && currentDeviceLng != 0.0) String.format(Locale.ENGLISH, "%.6f", currentDeviceLng) else ""
+    )
+  }
   var radiusStr by remember { mutableStateOf(initialSite?.radiusMeters?.toString() ?: "100") }
   var address by remember { mutableStateOf(initialSite?.address ?: "") }
   var isSearchingGps by remember { mutableStateOf(false) }
@@ -3780,17 +3820,23 @@ fun WorkSiteFormDialog(
       com.example.service.LocationHelper.searchLocationWithDiagnostics(
         context = context,
         isOnline = isOnline,
+        timeoutMillis = 14000L,
         onResult = { result ->
           isSearchingGps = false
           when (result) {
             is com.example.service.LocationHelper.LocationSearchResult.Success -> {
-              latStr = String.format(Locale.ENGLISH, "%.6f", result.coordinates.latitude)
-              lngStr = String.format(Locale.ENGLISH, "%.6f", result.coordinates.longitude)
-              gpsSuccessMessage = "Real GPS acquired: ${String.format(Locale.ENGLISH, "%.4f, %.4f", result.coordinates.latitude, result.coordinates.longitude)} (±${result.coordinates.accuracy.toInt()}m) ✓"
-              gpsErrorMessage = null
+              if (result.isRealGps) {
+                latStr = String.format(Locale.ENGLISH, "%.6f", result.coordinates.latitude)
+                lngStr = String.format(Locale.ENGLISH, "%.6f", result.coordinates.longitude)
+                gpsSuccessMessage = "GPS acquired: Lat ${String.format(Locale.ENGLISH, "%.6f", result.coordinates.latitude)}, Lng ${String.format(Locale.ENGLISH, "%.6f", result.coordinates.longitude)} (±${result.coordinates.accuracy.toInt()}m) ✓"
+                gpsErrorMessage = null
+              } else {
+                gpsSuccessMessage = null
+                gpsErrorMessage = "Approximate/fallback location used — please verify manually."
+              }
             }
             is com.example.service.LocationHelper.LocationSearchResult.Failure -> {
-              gpsErrorMessage = result.explanationArabic
+              gpsErrorMessage = result.explanationEnglish
               gpsSuccessMessage = null
             }
           }
@@ -3798,7 +3844,7 @@ fun WorkSiteFormDialog(
       )
     } else {
       isSearchingGps = false
-      gpsErrorMessage = "تم رفض إذن تحديد الموقع. يرجى تفعيل إذن الموقع من إعدادات الهاتف."
+      gpsErrorMessage = "Location permission denied. Please grant location access in device settings."
     }
   }
 
@@ -3817,17 +3863,23 @@ fun WorkSiteFormDialog(
       com.example.service.LocationHelper.searchLocationWithDiagnostics(
         context = context,
         isOnline = isOnline,
+        timeoutMillis = 14000L,
         onResult = { result ->
           isSearchingGps = false
           when (result) {
             is com.example.service.LocationHelper.LocationSearchResult.Success -> {
-              latStr = String.format(Locale.ENGLISH, "%.6f", result.coordinates.latitude)
-              lngStr = String.format(Locale.ENGLISH, "%.6f", result.coordinates.longitude)
-              gpsSuccessMessage = "Real GPS acquired: ${String.format(Locale.ENGLISH, "%.4f, %.4f", result.coordinates.latitude, result.coordinates.longitude)} (±${result.coordinates.accuracy.toInt()}m) ✓"
-              gpsErrorMessage = null
+              if (result.isRealGps) {
+                latStr = String.format(Locale.ENGLISH, "%.6f", result.coordinates.latitude)
+                lngStr = String.format(Locale.ENGLISH, "%.6f", result.coordinates.longitude)
+                gpsSuccessMessage = "GPS acquired: Lat ${String.format(Locale.ENGLISH, "%.6f", result.coordinates.latitude)}, Lng ${String.format(Locale.ENGLISH, "%.6f", result.coordinates.longitude)} (±${result.coordinates.accuracy.toInt()}m) ✓"
+                gpsErrorMessage = null
+              } else {
+                gpsSuccessMessage = null
+                gpsErrorMessage = "Approximate/fallback location used — please verify manually."
+              }
             }
             is com.example.service.LocationHelper.LocationSearchResult.Failure -> {
-              gpsErrorMessage = result.explanationArabic
+              gpsErrorMessage = result.explanationEnglish
               gpsSuccessMessage = null
             }
           }
@@ -3949,28 +4001,7 @@ fun WorkSiteFormDialog(
           modifier = Modifier.fillMaxWidth(),
         )
 
-        // 1. Interactive 2D Map for Site Geofence & Location Picking
-        val currentLatNum = latStr.toDoubleOrNull() ?: 21.543333
-        val currentLngNum = lngStr.toDoubleOrNull() ?: 39.172778
-        val currentRadiusNum = radiusStr.toIntOrNull()?.coerceIn(10, 10000) ?: 100
-
-        AdminSitePickerMap(
-          initialLat = currentLatNum,
-          initialLng = currentLngNum,
-          radiusMeters = currentRadiusNum,
-          siteName = name.ifBlank { "Work Site" },
-          onCoordinatesChanged = { newLat, newLng ->
-            latStr = String.format(Locale.ENGLISH, "%.6f", newLat)
-            lngStr = String.format(Locale.ENGLISH, "%.6f", newLng)
-            gpsErrorMessage = null
-            gpsSuccessMessage = "Location set on map: ${String.format(Locale.ENGLISH, "%.4f, %.4f", newLat, newLng)}"
-          },
-          onMyLocationClick = performFetchGps,
-          isSearchingLocation = isSearchingGps,
-          modifier = Modifier.fillMaxWidth(),
-        )
-
-        // GPS Fetch Current Location Button
+        // GPS Fetch Current Location Button (Top Action)
         Button(
           onClick = performFetchGps,
           enabled = !isSearchingGps,
@@ -3979,7 +4010,7 @@ fun WorkSiteFormDialog(
             containerColor = BentoBluePrimary,
             contentColor = Color.White,
           ),
-          modifier = Modifier.fillMaxWidth().height(44.dp),
+          modifier = Modifier.fillMaxWidth().height(46.dp),
         ) {
           if (isSearchingGps) {
             CircularProgressIndicator(
@@ -3988,11 +4019,33 @@ fun WorkSiteFormDialog(
               color = Color.White,
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Fetching GPS Coordinates...", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("Searching for Live GPS Signal...", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
           } else {
             Icon(Icons.Default.MyLocation, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("📍 Fetch Current GPS Location", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("📍 Fetch Current GPS Location", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
+          }
+        }
+
+        // Coordinates Label & Info Banner
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = Color(0xFFF8FAFC),
+          border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Icon(Icons.Default.LocationOn, contentDescription = null, tint = BentoBluePrimary, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "GPS Coordinates (Latitude & Longitude)",
+              fontSize = 11.5.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = Color(0xFF334155),
+            )
           }
         }
 
@@ -4004,7 +4057,9 @@ fun WorkSiteFormDialog(
               gpsErrorMessage = null
               gpsSuccessMessage = null
             },
-            label = { Text("Latitude *", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+            label = { Text("Latitude * (خط العرض)", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+            placeholder = { Text("e.g. 21.543333", fontSize = 11.sp, color = Color.Gray) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
             colors = OutlinedTextFieldDefaults.colors(
               focusedTextColor = Color.Black,
@@ -4026,7 +4081,9 @@ fun WorkSiteFormDialog(
               gpsErrorMessage = null
               gpsSuccessMessage = null
             },
-            label = { Text("Longitude *", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+            label = { Text("Longitude * (خط الطول)", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+            placeholder = { Text("e.g. 39.172778", fontSize = 11.sp, color = Color.Gray) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
             colors = OutlinedTextFieldDefaults.colors(
               focusedTextColor = Color.Black,
@@ -4128,7 +4185,7 @@ fun WorkSiteFormDialog(
             onConfirm(name.trim(), lat, lng, radius, address.trim())
           }
         },
-        enabled = name.isNotBlank() && !isSearchingGps,
+        enabled = !isSearchingGps,
         colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
       ) {
         Text("Save Work Site")

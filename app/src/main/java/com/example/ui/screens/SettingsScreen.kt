@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
@@ -82,15 +83,15 @@ import java.util.Locale
 fun SettingsScreen(
   profile: WorkerProfile,
   selectedSite: WorkSite,
-  isOutsideSimulation: Boolean,
+  isOutsideSimulation: Boolean = false,
   fcmStatus: String,
   fcmToken: String?,
   activityLogs: List<ActivityLog>,
   currentUser: UserAccount? = null,
   mapTilerApiKey: String = "",
   onUpdateMapTilerKey: (String) -> Unit = {},
-  onToggleSimulator: (Boolean) -> Unit,
-  onResetToday: () -> Unit,
+  onToggleSimulator: ((Boolean) -> Unit)? = null,
+  onResetToday: () -> Unit = {},
   onResetDeviceBinding: () -> Unit = {},
   onLogout: () -> Unit = {},
   modifier: Modifier = Modifier,
@@ -189,21 +190,42 @@ fun SettingsScreen(
               .padding(10.dp),
           horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-          Column {
-            Text(text = "Bound Device", fontSize = 11.sp, color = BentoTextSecondary)
-            Text(
-              text = currentUser?.boundDeviceModel ?: "This Device (Bound)",
-              fontSize = 12.5.sp,
-              fontWeight = FontWeight.SemiBold,
-            )
-          }
-          Column {
-            Text(text = "Device ID", fontSize = 11.sp, color = BentoTextSecondary)
-            Text(
-              text = currentUser?.boundDeviceId?.take(12)?.plus("...") ?: "SECURE_HW_ID",
-              fontSize = 12.5.sp,
-              fontWeight = FontWeight.SemiBold,
-            )
+          if (isAdmin) {
+            Column {
+              Text(text = "Device Access", fontSize = 11.sp, color = BentoTextSecondary)
+              Text(
+                text = "Any Device (Open Access)",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF673AB7),
+              )
+            }
+            Column {
+              Text(text = "Binding Policy", fontSize = 11.sp, color = BentoTextSecondary)
+              Text(
+                text = "Unrestricted (Admin)",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = BentoSuccess,
+              )
+            }
+          } else {
+            Column {
+              Text(text = "Bound Device", fontSize = 11.sp, color = BentoTextSecondary)
+              Text(
+                text = currentUser?.boundDeviceModel?.ifEmpty { "This Device (Bound)" } ?: "This Device (Bound)",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+              )
+            }
+            Column {
+              Text(text = "Device ID", fontSize = 11.sp, color = BentoTextSecondary)
+              Text(
+                text = currentUser?.boundDeviceId?.take(12)?.plus("...") ?: "SECURE_HW_ID",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+              )
+            }
           }
         }
 
@@ -313,14 +335,14 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Icon(
-              imageVector = Icons.Default.PhoneAndroid,
+              imageVector = if (isAdmin) Icons.Default.Devices else Icons.Default.PhoneAndroid,
               contentDescription = null,
-              tint = BentoBluePrimary,
+              tint = if (isAdmin) Color(0xFF673AB7) else BentoBluePrimary,
               modifier = Modifier.size(22.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = "Device Security",
+              text = if (isAdmin) "Admin Multi-Device Policy" else "Device Security",
               fontWeight = FontWeight.Bold,
               fontSize = 14.sp,
               maxLines = 1,
@@ -333,14 +355,14 @@ fun SettingsScreen(
             modifier =
               Modifier
                 .clip(RoundedCornerShape(50.dp))
-                .background(BentoSuccessContainer)
+                .background(if (isAdmin) Color(0xFFEDE7F6) else BentoSuccessContainer)
                 .padding(horizontal = 8.dp, vertical = 3.dp),
           ) {
             Text(
-              text = "Authorized",
+              text = if (isAdmin) "Multi-Device" else "Authorized",
               fontSize = 10.sp,
               fontWeight = FontWeight.Bold,
-              color = BentoSuccess,
+              color = if (isAdmin) Color(0xFF673AB7) else BentoSuccess,
               maxLines = 1,
               softWrap = false,
             )
@@ -349,111 +371,35 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        Text(
-          text = "Device: ${profile.deviceModel}",
-          fontSize = 13.sp,
-          fontWeight = FontWeight.Medium,
-        )
-        Text(
-          text = "Device Fingerprint: ${profile.deviceId}",
-          fontSize = 11.sp,
-          color = BentoTextSecondary,
-        )
-      }
-    }
-
-    // 3. Geofencing Test Bench Simulator (Admin Only)
-    if (isAdmin) {
-      Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, BentoOutline),
-      ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Icon(
-              imageVector = Icons.Default.Tune,
-              contentDescription = null,
-              tint = BentoBluePrimary,
-              modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-              text = "Geofence Testing Simulator",
-              fontWeight = FontWeight.Bold,
-              fontSize = 14.sp,
-            )
-          }
-
-          Spacer(modifier = Modifier.height(8.dp))
+        if (isAdmin) {
           Text(
-            text = "Test validation when worker is simulated outside or inside site boundary:",
+            text = "Admin accounts have unrestricted access and can sign in from any phone, tablet, or workstation without single-device binding.",
             fontSize = 12.sp,
+            color = Color(0xFF475569),
+            lineHeight = 16.sp,
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = "Current Device: ${profile.deviceModel}",
+            fontSize = 11.5.sp,
             color = BentoTextSecondary,
           )
-
-          Spacer(modifier = Modifier.height(12.dp))
-
-          Row(
-            modifier =
-              Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(BentoTileGray.copy(alpha = 0.5f))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Column(modifier = Modifier.weight(1f, fill = false)) {
-              Text(
-                text = if (isOutsideSimulation) "Outside (185m)" else "Inside (15m)",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isOutsideSimulation) BentoError else BentoSuccess,
-              )
-              Text(
-                text = "Radius: ${selectedSite.radiusMeters}m",
-                fontSize = 11.sp,
-                color = BentoTextSecondary,
-              )
-            }
-
-            Switch(
-              checked = isOutsideSimulation,
-              onCheckedChange = { onToggleSimulator(it) },
-              colors =
-                SwitchDefaults.colors(
-                  checkedThumbColor = BentoError,
-                  checkedTrackColor = Color(0xFFFFCDD2),
-                  uncheckedThumbColor = BentoSuccess,
-                  uncheckedTrackColor = BentoSuccessContainer,
-                ),
-            )
-          }
-
-          Spacer(modifier = Modifier.height(12.dp))
-
-          OutlinedButton(
-            onClick = onResetToday,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-          ) {
-            Icon(
-              imageVector = Icons.Default.Refresh,
-              contentDescription = null,
-              modifier = Modifier.size(16.dp),
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "Reset Today's Attendance for Testing", fontSize = 13.sp)
-          }
+        } else {
+          Text(
+            text = "Device: ${profile.deviceModel}",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+          )
+          Text(
+            text = "Device Fingerprint: ${profile.deviceId}",
+            fontSize = 11.sp,
+            color = BentoTextSecondary,
+          )
         }
       }
     }
 
-    // 4. GPS Geofence Telemetry & Precision Card
+    // 3. GPS Geofence Telemetry & Precision Card
     Card(
       modifier = Modifier.fillMaxWidth(),
       shape = RoundedCornerShape(22.dp),

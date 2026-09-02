@@ -3,6 +3,8 @@ package com.example.ui.components
 import com.example.BuildConfig
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
@@ -27,6 +29,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
@@ -283,7 +288,7 @@ fun BentoHeader(
                 Modifier
                   .clip(RoundedCornerShape(50.dp))
                   .background(BentoBlueContainer)
-                  .clickable { onOpenDashboard() }
+                  .bounceClick(scaleDown = 0.93f) { onOpenDashboard() }
                   .padding(horizontal = 10.dp, vertical = 6.dp),
               contentAlignment = Alignment.Center,
             ) {
@@ -309,10 +314,11 @@ fun BentoHeader(
             modifier =
               Modifier
                 .size(44.dp)
+                .shadow(2.dp, CircleShape)
                 .clip(CircleShape)
                 .background(BentoBlueContainer)
                 .border(2.dp, Color.White, CircleShape)
-                .shadow(2.dp, CircleShape),
+                .bounceClick(scaleDown = 0.93f) {},
             contentAlignment = Alignment.Center,
           ) {
             Text(
@@ -442,15 +448,44 @@ fun BentoHeroCard(
 
   val gradient =
     Brush.verticalGradient(
-      colors = listOf(BentoBluePrimary, Color(0xFF004690))
+      colors = listOf(BentoBluePrimary, Color(0xFF003F8A), Color(0xFF002B66))
     )
 
   Box(
     modifier =
       modifier
         .fillMaxWidth()
+        .shadow(
+          elevation = 8.dp,
+          shape = RoundedCornerShape(32.dp),
+          spotColor = BentoBluePrimary.copy(alpha = 0.5f),
+          ambientColor = BentoBluePrimary.copy(alpha = 0.15f),
+        )
         .clip(RoundedCornerShape(32.dp))
         .background(gradient)
+        .drawWithCache {
+          val centerX = size.width
+          val centerY = 0f
+          onDrawBehind {
+            // Decorative background glowing aura circles
+            drawCircle(
+              color = Color.White.copy(alpha = 0.07f),
+              radius = size.width * 0.55f,
+              center = Offset(centerX, centerY),
+            )
+            drawCircle(
+              color = Color.White.copy(alpha = 0.04f),
+              radius = size.width * 0.85f,
+              center = Offset(centerX, centerY),
+            )
+            drawCircle(
+              color = BentoBlueContainer.copy(alpha = 0.08f),
+              radius = size.width * 0.40f,
+              center = Offset(0f, size.height),
+            )
+          }
+        }
+        .bounceClick(scaleDown = 0.985f) {}
         .padding(horizontal = 24.dp, vertical = 22.dp)
         .testTag("bento_hero_card"),
     contentAlignment = Alignment.Center,
@@ -459,20 +494,37 @@ fun BentoHeroCard(
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center,
     ) {
-      Text(
-        text = "CURRENT STATUS",
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Medium,
-        color = Color(0xFFD8E2FF),
-        letterSpacing = 1.sp,
-      )
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+      ) {
+        val beaconColor = when (status) {
+          AttendanceStatus.CHECKED_IN -> Color(0xFF00E676)
+          AttendanceStatus.NOT_CHECKED_IN -> Color(0xFF38BDF8)
+          AttendanceStatus.CHECKED_OUT -> Color(0xFFCBD5E1)
+        }
+        Box(
+          modifier = Modifier
+            .size(7.dp)
+            .pulseEffect(minScale = 0.85f, maxScale = 1.25f)
+            .clip(CircleShape)
+            .background(beaconColor)
+        )
+        Text(
+          text = "CURRENT STATUS",
+          fontSize = 12.5.sp,
+          fontWeight = FontWeight.SemiBold,
+          color = Color(0xFFD8E2FF),
+          letterSpacing = 1.2.sp,
+        )
+      }
 
       Spacer(modifier = Modifier.height(6.dp))
 
       Text(
         text = title,
         fontSize = 32.sp,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.ExtraBold,
         color = Color.White,
         textAlign = TextAlign.Center,
       )
@@ -483,7 +535,8 @@ fun BentoHeroCard(
         modifier =
           Modifier
             .clip(RoundedCornerShape(50.dp))
-            .background(Color.White.copy(alpha = 0.20f))
+            .background(Color.White.copy(alpha = 0.18f))
+            .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(50.dp))
             .padding(horizontal = 14.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
       ) {
@@ -499,41 +552,42 @@ fun BentoHeroCard(
 }
 
 /**
- * Work Site Bento Tile
+ * Clean, Full-Width Work Site Bento Card
  */
 @Composable
-fun BentoWorkSiteTile(
+fun BentoWorkSiteCard(
   siteName: String,
   modifier: Modifier = Modifier,
   onClick: () -> Unit = {},
 ) {
-  Box(
-    modifier =
-      modifier
-        .clip(RoundedCornerShape(24.dp))
-        .background(BentoTileGray)
-        .clickable { onClick() }
-        .padding(16.dp)
-        .testTag("bento_site_tile"),
+  Surface(
+    modifier = modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(20.dp))
+      .bounceClick(scaleDown = 0.97f) { onClick() }
+      .testTag("bento_site_tile"),
+    shape = RoundedCornerShape(20.dp),
+    color = Color.White,
+    border = BorderStroke(1.dp, BentoOutline.copy(alpha = 0.6f)),
+    shadowElevation = 3.dp,
   ) {
-    Column(
-      modifier = Modifier.fillMaxSize(),
-      verticalArrangement = Arrangement.SpaceBetween,
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 14.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
     ) {
-      // Top Row: Location Icon + "Select Site" interactive badge
       Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.weight(1f, fill = false),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        // Location Pin Icon Box
         Box(
-          modifier =
-            Modifier
-              .size(40.dp)
-              .clip(RoundedCornerShape(16.dp))
-              .background(Color.White)
-              .shadow(1.dp, RoundedCornerShape(16.dp)),
+          modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(BentoBlueContainer),
           contentAlignment = Alignment.Center,
         ) {
           Icon(
@@ -544,147 +598,47 @@ fun BentoWorkSiteTile(
           )
         }
 
-        // Visual selection affordance badge
-        Surface(
-          shape = RoundedCornerShape(50.dp),
-          color = Color.White,
-          border = BorderStroke(1.dp, BentoBluePrimary.copy(alpha = 0.4f)),
-        ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-          ) {
-            Icon(
-              imageVector = Icons.Default.LocationOn,
-              contentDescription = null,
-              tint = BentoBluePrimary,
-              modifier = Modifier.size(12.dp),
-            )
-            Text(
-              text = "Select",
-              fontSize = 10.5.sp,
-              fontWeight = FontWeight.Bold,
-              color = BentoBluePrimary,
-            )
-          }
-        }
-      }
-
-      Column {
-        Text(
-          text = "Work Site",
-          fontSize = 12.sp,
-          fontWeight = FontWeight.Bold,
-          color = Color.Black,
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-          text = siteName,
-          fontSize = 14.sp,
-          fontWeight = FontWeight.Bold,
-          color = Color.Black,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-          lineHeight = 18.sp,
-        )
-      }
-    }
-  }
-}
-
-/**
- * Geofence Status Bento Tile
- */
-@Composable
-fun BentoGeofenceTile(
-  isInside: Boolean,
-  distanceMeters: Double,
-  modifier: Modifier = Modifier,
-  onToggleSimulator: (() -> Unit)? = null,
-) {
-  val isDebug = BuildConfig.DEBUG
-  val bg = if (isInside) BentoLilac else Color(0xFFFFEBEE)
-  val border = if (isInside) BentoLilacBorder else Color(0xFFFFCDD2)
-  val textColor = if (isInside) BentoLilacText else BentoError
-  val distanceText =
-    if (isInside) "Inside (${distanceMeters.toInt()}m)"
-    else "Outside (${distanceMeters.toInt()}m)"
-
-  val baseModifier = modifier
-    .clip(RoundedCornerShape(16.dp))
-    .background(bg)
-    .border(1.dp, border, RoundedCornerShape(16.dp))
-
-  val clickableModifier = if (isDebug && onToggleSimulator != null) {
-    baseModifier.clickable { onToggleSimulator() }
-  } else {
-    baseModifier
-  }
-
-  Box(
-    modifier = clickableModifier
-      .padding(12.dp)
-      .testTag("bento_geofence_tile"),
-  ) {
-    Column(
-      modifier = Modifier.fillMaxSize(),
-      verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Box(
-          modifier =
-            Modifier
-              .size(32.dp)
-              .clip(RoundedCornerShape(10.dp))
-              .background(Color.White)
-              .shadow(1.dp, RoundedCornerShape(10.dp)),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(
-            imageVector = if (isInside) Icons.Default.LocationOn else Icons.Default.Warning,
-            contentDescription = "Geofence Status",
-            tint = textColor,
-            modifier = Modifier.size(18.dp),
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Text(
+            text = "Assigned Work Site",
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = BentoTextSecondary,
+          )
+          Text(
+            text = siteName.ifBlank { "Main Work Site" },
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF0F172A),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
           )
         }
-
-        if (isDebug) {
-          Surface(
-            shape = RoundedCornerShape(4.dp),
-            color = Color(0xFFFFF3E0),
-            border = BorderStroke(0.5.dp, Color(0xFFFFB74D)),
-          ) {
-            Text(
-              text = "DEBUG",
-              fontSize = 9.sp,
-              fontWeight = FontWeight.Bold,
-              color = Color(0xFFE65100),
-              modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-            )
-          }
-        }
       }
 
-      Column {
-        Text(
-          text = "Geofence Status",
-          fontSize = 11.sp,
-          fontWeight = FontWeight.SemiBold,
-          color = BentoTextSecondary,
-        )
-        Spacer(modifier = Modifier.height(1.dp))
-        Text(
-          text = distanceText,
-          fontSize = 12.5.sp,
-          fontWeight = FontWeight.Bold,
-          color = textColor,
-          lineHeight = 16.sp,
-        )
+      Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = BentoBlueContainer.copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, BentoBluePrimary.copy(alpha = 0.25f)),
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          Icon(
+            imageVector = Icons.Default.Place,
+            contentDescription = null,
+            tint = BentoBluePrimary,
+            modifier = Modifier.size(16.dp),
+          )
+          Text(
+            text = "Change Site",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = BentoBluePrimary,
+          )
+        }
       }
     }
   }
@@ -1144,7 +1098,7 @@ fun BentoIdentityCard(
               if (photoCaptured) BentoSuccess.copy(alpha = 0.5f) else BentoOutline.copy(alpha = 0.7f),
               RoundedCornerShape(16.dp),
             )
-            .clickable { onCaptureClick() }
+            .bounceClick(scaleDown = 0.98f) { onCaptureClick() }
             .padding(10.dp)
             .testTag("bento_identity_box"),
         contentAlignment = Alignment.Center,
@@ -1248,9 +1202,11 @@ fun BentoIdentityCard(
             Box(
               modifier =
                 Modifier
-                  .size(44.dp)
+                  .size(46.dp)
+                  .pulseEffect(minScale = 0.92f, maxScale = 1.08f)
                   .clip(CircleShape)
-                  .background(BentoBlueContainer),
+                  .background(BentoBlueContainer)
+                  .border(1.5.dp, BentoBluePrimary.copy(alpha = 0.4f), CircleShape),
               contentAlignment = Alignment.Center,
             ) {
               Icon(
@@ -1326,13 +1282,23 @@ fun BentoActionButton(
       else -> BentoBluePrimary
     }
 
+  val buttonInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+
   Button(
     onClick = onClick,
     enabled = !isProcessing && !isCompleted && !isCooldownActive,
+    interactionSource = buttonInteraction,
     modifier =
       modifier
         .fillMaxWidth()
         .height(56.dp)
+        .shadow(
+          elevation = if (isCompleted || isCooldownActive) 1.dp else 6.dp,
+          shape = RoundedCornerShape(18.dp),
+          spotColor = buttonBg.copy(alpha = 0.55f),
+          ambientColor = buttonBg.copy(alpha = 0.2f),
+        )
+        .bounceOnPress(buttonInteraction, scaleDown = 0.96f)
         .testTag("attendance_action_button"),
     shape = RoundedCornerShape(18.dp),
     colors =
@@ -1342,7 +1308,7 @@ fun BentoActionButton(
         disabledContainerColor = if (isCooldownActive) Color(0xFF90A4AE) else Color(0xFF8E99A8),
         disabledContentColor = Color.White.copy(alpha = 0.9f),
       ),
-    elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp, pressedElevation = 1.dp),
+    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
   ) {
     if (isProcessing) {
       CircularProgressIndicator(
@@ -1407,8 +1373,15 @@ fun BentoNavigationBar(
     modifier =
       modifier
         .fillMaxWidth()
+        .shadow(
+          elevation = 10.dp,
+          shape = RoundedCornerShape(50.dp),
+          spotColor = BentoBluePrimary.copy(alpha = 0.22f),
+          ambientColor = Color.Black.copy(alpha = 0.08f),
+        )
         .clip(RoundedCornerShape(50.dp))
         .background(BentoNavBg)
+        .border(1.dp, Color.White.copy(alpha = 0.65f), RoundedCornerShape(50.dp))
         .padding(horizontal = 4.dp, vertical = 6.dp)
         .testTag("bento_nav_bar"),
   ) {
@@ -1483,14 +1456,28 @@ private fun BentoNavItem(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val contentColor = if (isSelected) BentoBluePrimary else BentoTextSecondary.copy(alpha = 0.7f)
-  val bgColor = if (isSelected) BentoBlueContainer else Color.Transparent
+  val contentColor by androidx.compose.animation.animateColorAsState(
+    targetValue = if (isSelected) BentoBluePrimary else BentoTextSecondary.copy(alpha = 0.7f),
+    label = "navContentColor",
+  )
+  val bgColor by androidx.compose.animation.animateColorAsState(
+    targetValue = if (isSelected) BentoBlueContainer else Color.Transparent,
+    label = "navBgColor",
+  )
+  val iconScale by androidx.compose.animation.core.animateFloatAsState(
+    targetValue = if (isSelected) 1.12f else 1.0f,
+    animationSpec = spring(
+      dampingRatio = Spring.DampingRatioMediumBouncy,
+      stiffness = Spring.StiffnessMediumLow,
+    ),
+    label = "navIconScale",
+  )
 
   Surface(
     shape = RoundedCornerShape(16.dp),
     color = bgColor,
     modifier = modifier
-      .clickable { onClick() }
+      .bounceClick(scaleDown = 0.88f) { onClick() }
       .padding(horizontal = 2.dp, vertical = 2.dp),
   ) {
     Column(
@@ -1506,7 +1493,12 @@ private fun BentoNavItem(
           imageVector = icon,
           contentDescription = label,
           tint = contentColor,
-          modifier = Modifier.size(22.dp),
+          modifier = Modifier
+            .size(22.dp)
+            .graphicsLayer {
+              scaleX = iconScale
+              scaleY = iconScale
+            },
         )
         if (badgeCount > 0) {
           Surface(

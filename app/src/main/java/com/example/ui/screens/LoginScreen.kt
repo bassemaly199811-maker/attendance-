@@ -96,6 +96,7 @@ fun LoginScreen(
   var rememberMe by remember { mutableStateOf(true) }
   var passwordVisible by remember { mutableStateOf(false) }
   var showDeviceMismatchDialog by remember { mutableStateOf(false) }
+  var validationError by remember { mutableStateOf<String?>(null) }
 
   val focusManager = LocalFocusManager.current
   val scrollState = rememberScrollState()
@@ -191,7 +192,10 @@ fun LoginScreen(
           // Username Field
           OutlinedTextField(
             value = username,
-            onValueChange = { username = it },
+            onValueChange = {
+              username = it
+              validationError = null
+            },
             label = { Text("Username", fontWeight = FontWeight.Medium) },
             placeholder = { Text("Enter your username", color = Color(0xFF616161)) },
             leadingIcon = {
@@ -223,7 +227,10 @@ fun LoginScreen(
           // Password Field
           OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = {
+              password = it
+              validationError = null
+            },
             label = { Text("Password", fontWeight = FontWeight.Medium) },
             placeholder = { Text("Enter password", color = Color(0xFF616161)) },
             leadingIcon = {
@@ -255,7 +262,16 @@ fun LoginScreen(
               KeyboardActions(
                 onDone = {
                   focusManager.clearFocus()
-                  if (username.isNotBlank() && password.isNotBlank() && !isLoggingIn) {
+                  if (username.isBlank() || password.isBlank()) {
+                    validationError = if (username.isBlank() && password.isBlank()) {
+                      "Please enter your username and password to sign in."
+                    } else if (username.isBlank()) {
+                      "Username cannot be blank. Please enter your username."
+                    } else {
+                      "Password cannot be blank. Please enter your password."
+                    }
+                  } else if (!isLoggingIn) {
+                    validationError = null
                     onLogin(username.trim(), password.trim(), rememberMe)
                   }
                 }
@@ -294,13 +310,15 @@ fun LoginScreen(
             )
           }
 
+          val activeError = validationError ?: errorMessage
+
           // Error Message Banner
           AnimatedVisibility(
-            visible = !errorMessage.isNullOrBlank(),
+            visible = !activeError.isNullOrBlank(),
             enter = fadeIn(),
             exit = fadeOut(),
           ) {
-            if (errorMessage != null) {
+            if (activeError != null) {
               Box(
                 modifier =
                   Modifier
@@ -318,7 +336,7 @@ fun LoginScreen(
                   )
                   Spacer(modifier = Modifier.width(8.dp))
                   Text(
-                    text = errorMessage,
+                    text = activeError,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = BentoError,
@@ -333,9 +351,20 @@ fun LoginScreen(
           Button(
             onClick = {
               focusManager.clearFocus()
-              onLogin(username.trim(), password.trim(), rememberMe)
+              if (username.isBlank() || password.isBlank()) {
+                validationError = if (username.isBlank() && password.isBlank()) {
+                  "Please enter your username and password to sign in."
+                } else if (username.isBlank()) {
+                  "Username cannot be blank. Please enter your username."
+                } else {
+                  "Password cannot be blank. Please enter your password."
+                }
+              } else {
+                validationError = null
+                onLogin(username.trim(), password.trim(), rememberMe)
+              }
             },
-            enabled = username.isNotBlank() && password.isNotBlank() && !isLoggingIn,
+            enabled = !isLoggingIn,
             modifier =
               Modifier
                 .fillMaxWidth()

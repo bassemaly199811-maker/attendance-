@@ -11,6 +11,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -104,6 +107,7 @@ object LocationHelper {
   fun searchLocationWithDiagnostics(
     context: Context,
     isOnline: Boolean = true,
+    timeoutMillis: Long = 12000L,
     onResult: (LocationSearchResult) -> Unit,
   ) {
     // 1. Check Permissions
@@ -111,22 +115,37 @@ object LocationHelper {
       onResult(
         LocationSearchResult.Failure(
           reason = LocationErrorReason.PERMISSION_DENIED,
-          explanationArabic = "يرجى منح إذن تحديد الموقع لتسجيل الحضور وجلب إحداثياتك الحقيقية.",
-          explanationEnglish = "Please grant Location permission to get real GPS coordinates.",
+          explanationArabic = "تم رفض إذن تحديد الموقع. يرجى تفعيل إذن الموقع للتطبيق من إعدادات الهاتف.",
+          explanationEnglish = "Location permission denied. Please grant location access in device settings.",
           fallbackCoordinates = null,
         )
       )
       return
     }
 
-    // 2. Check GPS Hardware / Service
+    // 2. Check Hardware Location Providers
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
     if (locationManager == null) {
       onResult(
         LocationSearchResult.Failure(
           reason = LocationErrorReason.PROVIDER_UNAVAILABLE,
-          explanationArabic = "خدمة الموقع غير متوفرة على هذا الجهاز.",
+          explanationArabic = "خدمة تحديد الموقع غير متوفرة على هذا الجهاز.",
           explanationEnglish = "Location service is unavailable on this device.",
+          fallbackCoordinates = null,
+        )
+      )
+      return
+    }
+
+    val isGpsEnabled = try { locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) } catch (_: Exception) { false }
+    val isNetworkLocEnabled = try { locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { false }
+
+    if (!isGpsEnabled && !isNetworkLocEnabled) {
+      onResult(
+        LocationSearchResult.Failure(
+          reason = LocationErrorReason.GPS_DISABLED,
+          explanationArabic = "خدمة GPS معطلة. يرجى تفعيل الموقع (GPS) من شريط الإشعارات أو إعدادات الجهاز.",
+          explanationEnglish = "GPS Location service is disabled. Please enable GPS in device settings.",
           fallbackCoordinates = null,
         )
       )
@@ -135,11 +154,35 @@ object LocationHelper {
 
     var resultDispatched = false
     val mainHandler = Handler(Looper.getMainLooper())
+    var fusedClient: com.google.android.gms.location.FusedLocationProviderClient? = null
+    var fusedCallback: LocationCallback? = null
+    var lmListener: LocationListener? = null
+    val cts = CancellationTokenSource()
+
+    fun cleanup() {
+      try {
+        cts.cancel()
+      } catch (_: Exception) {}
+
+      fusedCallback?.let { cb ->
+        try {
+          fusedClient?.removeLocationUpdates(cb)
+        } catch (_: Exception) {}
+      }
+
+      lmListener?.let { l ->
+        try {
+          locationManager.removeUpdates(l)
+        } catch (_: Exception) {}
+      }
+    }
 
     fun dispatchSuccess(location: Location, providerName: String) {
       if (resultDispatched) return
+
       if (isMockLocation(location)) {
         resultDispatched = true
+        cleanup()
         onResult(
           LocationSearchResult.Failure(
             reason = LocationErrorReason.MOCK_LOCATION_DETECTED,
@@ -153,6 +196,7 @@ object LocationHelper {
 
       if (validateCoordinates(location.latitude, location.longitude)) {
         resultDispatched = true
+        cleanup()
         val acc = if (location.accuracy > 0f) location.accuracy.toDouble() else 8.0
         val coords = GpsCoordinates(
           latitude = location.latitude,
@@ -170,123 +214,111 @@ object LocationHelper {
       }
     }
 
-    // 3. Try Google Play Services FusedLocationProviderClient first (highest accuracy)
+    // 3. Request live high accuracy GPS fix via Google Play Services FusedLocationProviderClient
     try {
-      val fusedClient = LocationServices.getFusedLocationProviderClient(context)
-      val cts = CancellationTokenSource()
+      fusedClient = LocationServices.getFusedLocationProviderClient(context)
 
+      // A) Immediate single fresh high-accuracy live fix attempt
       fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
         .addOnSuccessListener { loc ->
-          if (loc != null) {
-            dispatchSuccess(loc, "FUSED_LIVE")
+          if (loc != null && !resultDispatched && validateCoordinates(loc.latitude, loc.longitude)) {
+            dispatchSuccess(loc, "FUSED_LIVE_GPS")
           }
         }
-        .addOnFailureListener {
-          // Fallback to locationManager
-        }
 
-      fusedClient.lastLocation.addOnSuccessListener { loc ->
-        if (loc != null && !resultDispatched) {
-          dispatchSuccess(loc, "FUSED_LAST_KNOWN")
+      // B) Continuous location stream until first valid fix
+      val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
+        .setMinUpdateIntervalMillis(500L)
+        .setMaxUpdates(10)
+        .build()
+
+      fusedCallback = object : LocationCallback() {
+        override fun onLocationResult(lr: LocationResult) {
+          val loc = lr.lastLocation
+          if (loc != null && !resultDispatched && validateCoordinates(loc.latitude, loc.longitude)) {
+            dispatchSuccess(loc, "FUSED_STREAM_GPS")
+          }
         }
       }
+
+      fusedClient.requestLocationUpdates(
+        locationRequest,
+        fusedCallback!!,
+        Looper.getMainLooper()
+      )
     } catch (_: Exception) {}
 
-    // 4. Also query Android LocationManager across all enabled providers
+    // 4. Query native LocationManager in parallel as hardware GPS backup
     try {
-      val allProviders = try {
-        locationManager.getProviders(true)
-      } catch (_: Exception) {
-        listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)
-      }
-
-      val lastKnownLocations = allProviders.mapNotNull { provider ->
-        try {
-          locationManager.getLastKnownLocation(provider)
-        } catch (_: Exception) {
-          null
-        }
-      }
-
-      val bestLastLocation = lastKnownLocations.maxByOrNull { it.time }
-      if (bestLastLocation != null && !resultDispatched) {
-        dispatchSuccess(bestLastLocation, bestLastLocation.provider ?: "LM_LAST_KNOWN")
-      }
-
-      // Request fresh updates on GPS and Network
-      val listener = object : LocationListener {
+      lmListener = object : LocationListener {
         override fun onLocationChanged(loc: Location) {
-          dispatchSuccess(loc, loc.provider ?: "LM_LIVE")
+          if (!resultDispatched && validateCoordinates(loc.latitude, loc.longitude)) {
+            dispatchSuccess(loc, loc.provider ?: "LM_HARDWARE_GPS")
+          }
         }
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         override fun onProviderEnabled(provider: String) {}
         override fun onProviderDisabled(provider: String) {}
       }
 
-      if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+      if (isGpsEnabled) {
         try {
           locationManager.requestLocationUpdates(
             LocationManager.GPS_PROVIDER,
-            500L,
+            1000L,
             0f,
-            listener,
+            lmListener!!,
             Looper.getMainLooper()
           )
         } catch (_: Exception) {}
       }
 
-      if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+      if (isNetworkLocEnabled) {
         try {
           locationManager.requestLocationUpdates(
             LocationManager.NETWORK_PROVIDER,
-            500L,
+            1000L,
             0f,
-            listener,
+            lmListener!!,
             Looper.getMainLooper()
           )
         } catch (_: Exception) {}
       }
+    } catch (_: Exception) {}
 
-      // 4-second timeout to clean up listener
-      mainHandler.postDelayed({
-        try {
-          locationManager.removeUpdates(listener)
-        } catch (_: Exception) {}
-
-        if (!resultDispatched) {
-          // If no provider responded, notify failure cleanly
-          onResult(
-            LocationSearchResult.Failure(
-              reason = LocationErrorReason.TIMEOUT_NO_SATELLITE_FIX,
-              explanationArabic = "تعذر الحصول على إشارة GPS حالياً. يرجى التأكد من تفعيل خدمة الموقع والخروج لمنطقة مفتوحة.",
-              explanationEnglish = "Unable to acquire satellite GPS fix. Please ensure location is enabled.",
-              fallbackCoordinates = null,
-            )
-          )
-        }
-      }, 4000)
-
-    } catch (e: Exception) {
+    // 6. Timeout Runnable (Configurable timeout, defaults to 12s)
+    // On timeout, stop fabricating fake coordinates! Return proper Failure with TIMEOUT_NO_SATELLITE_FIX
+    mainHandler.postDelayed({
       if (!resultDispatched) {
+        cleanup()
         onResult(
           LocationSearchResult.Failure(
-            reason = LocationErrorReason.UNKNOWN_ERROR,
-            explanationArabic = "حدث خطأ أثناء جلب إحداثيات الموقع: ${e.localizedMessage}",
-            explanationEnglish = "Error fetching location: ${e.localizedMessage}",
+            reason = LocationErrorReason.TIMEOUT_NO_SATELLITE_FIX,
+            explanationArabic = "تعذر الحصول على إشارة GPS حالياً. يرجى الانتقال إلى مكان مفتوح أو بجوار نافذة وإعادة المحاولة.",
+            explanationEnglish = "Could not get a GPS fix. Move to an open area or near a window and try again.",
             fallbackCoordinates = null,
           )
         )
       }
-    }
+    }, timeoutMillis)
   }
 
   fun getCurrentLocation(
     context: Context,
+    timeoutMillis: Long = 12000L,
     onResult: (GpsCoordinates) -> Unit,
   ) {
-    searchLocationWithDiagnostics(context = context, isOnline = true) { result ->
+    searchLocationWithDiagnostics(
+      context = context,
+      isOnline = true,
+      timeoutMillis = timeoutMillis,
+    ) { result ->
       when (result) {
-        is LocationSearchResult.Success -> onResult(result.coordinates)
+        is LocationSearchResult.Success -> {
+          if (result.isRealGps) {
+            onResult(result.coordinates)
+          }
+        }
         is LocationSearchResult.Failure -> {
           if (result.fallbackCoordinates != null) {
             onResult(result.fallbackCoordinates)

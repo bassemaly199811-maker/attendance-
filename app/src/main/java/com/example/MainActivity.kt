@@ -67,15 +67,21 @@ class MainActivity : ComponentActivity() {
     setContent {
       MyApplicationTheme {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-          WorkAttendanceApp()
+          WorkAttendanceApp(initialIntent = intent)
         }
       }
     }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
   }
 }
 
 @Composable
 fun WorkAttendanceApp(
+  initialIntent: Intent? = null,
   viewModel: AttendanceViewModel = viewModel(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -115,10 +121,23 @@ fun WorkAttendanceApp(
       viewModel.checkAndRefreshLocationState(context)
     }
 
-  // Check and refresh state on startup
-  LaunchedEffect(Unit) {
+  // Check and refresh state on startup, and handle navigation from notifications
+  LaunchedEffect(initialIntent) {
     viewModel.checkAndRefreshLocationState(context)
     viewModel.refreshFromCloud(isInitial = true)
+
+    val openTab = initialIntent?.getStringExtra("OPEN_TAB")
+    when (openTab) {
+      "SECURITY_ALERTS" -> {
+        viewModel.openUserManagementTab(initialSubTab = 1)
+      }
+      "USER_MANAGEMENT" -> {
+        viewModel.openUserManagementTab(initialSubTab = 0)
+      }
+      "LEAVE_APPROVALS" -> {
+        viewModel.setTab(BentoTab.LEAVE_APPROVALS)
+      }
+    }
   }
 
   // Refresh status on resume
@@ -252,6 +271,7 @@ fun WorkAttendanceApp(
             isOnline = uiState.isOnline,
             allLeaveRequests = allLeaveRequests,
             allLeaveBalances = allLeaveBalances,
+            securityAlerts = allSecurityAlerts,
             isRefreshing = uiState.isRefreshing,
             lastSyncTime = uiState.lastSyncTime,
             onRefresh = { viewModel.refreshFromCloud() },
@@ -314,7 +334,8 @@ fun WorkAttendanceApp(
               )
             },
             onUpdateShiftConfig = { viewModel.updateShiftSchedule(it) },
-            onNavigateToUserManagement = { viewModel.setTab(BentoTab.USER_MANAGEMENT) },
+            onNavigateToUserManagement = { viewModel.openUserManagementTab(initialSubTab = 0) },
+            onNavigateToSecurityAlerts = { viewModel.openUserManagementTab(initialSubTab = 1) },
             onNavigateToLeaveApprovals = { viewModel.setTab(BentoTab.LEAVE_APPROVALS) },
           )
         }
@@ -329,6 +350,8 @@ fun WorkAttendanceApp(
             onDeleteUser = { username -> viewModel.deleteUser(username) },
             onResetDeviceBinding = { username -> viewModel.resetDeviceBindingForUser(username) },
             onResolveSecurityAlert = { alertId -> viewModel.resolveSecurityAlert(alertId) },
+            initialTab = uiState.userManagementInitialTab,
+            onClose = { viewModel.setTab(BentoTab.DASHBOARD) },
           )
         }
 

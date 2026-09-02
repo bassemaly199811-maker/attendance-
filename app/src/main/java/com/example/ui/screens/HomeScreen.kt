@@ -45,12 +45,11 @@ import com.example.ui.components.BentoEarlyCheckoutWarningDialog
 import com.example.ui.components.BentoErrorGuidanceDialog
 import com.example.ui.components.BentoGeofenceCoordinatesCard
 import com.example.ui.components.BentoGeofenceMapCard
-import com.example.ui.components.BentoGeofenceTile
 import com.example.ui.components.BentoHeader
 import com.example.ui.components.BentoHeroCard
 import com.example.ui.components.BentoIdentityCard
 import com.example.ui.components.BentoNotificationBanner
-import com.example.ui.components.BentoWorkSiteTile
+import com.example.ui.components.BentoWorkSiteCard
 import com.example.ui.components.CheckoutSuccessDialog
 import com.example.ui.components.CheckInSuccessDialog
 import com.example.ui.viewmodel.AttendanceUiState
@@ -95,7 +94,7 @@ fun HomeScreen(
   onSiteSelect: (WorkSite) -> Unit,
   onSelectWorker: (WorkerEntity) -> Unit = {},
   onSelectWorkerByName: (String) -> Unit = {},
-  onToggleSimulator: (Boolean) -> Unit,
+  onToggleSimulator: ((Boolean) -> Unit)? = null,
   onLivePhotoCaptured: (Bitmap) -> Unit,
   onCameraDismissed: () -> Unit = {},
   onDismissNotification: () -> Unit,
@@ -203,46 +202,27 @@ fun HomeScreen(
         lastOperation = uiState.lastOperationTime,
       )
 
-      // 3. 2-Column Bento Grid
-      Row(
-        modifier = Modifier.fillMaxWidth().height(140.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        // Site Tile
-        BentoWorkSiteTile(
-          siteName = uiState.selectedSite.name,
-          modifier = Modifier.weight(1f).fillMaxHeight(),
-          onClick = { showSiteDialog = true },
-        )
-
-        // Geofence Tile
-        BentoGeofenceTile(
-          isInside = uiState.isInsideGeofence,
-          distanceMeters = uiState.currentDistanceMeters,
-          modifier = Modifier.weight(1f).fillMaxHeight(),
-          onToggleSimulator = if (BuildConfig.DEBUG) {
-            { onToggleSimulator(!uiState.isOutsideSimulation) }
-          } else null,
-        )
-      }
-
-      // 4. Interactive Live GPS Geofence Map Card (Leaflet OpenStreetMap + Pulse Marker + Geodesic Polyline)
-      BentoGeofenceMapCard(
+      // 3. Work Site Selection Card
+      BentoWorkSiteCard(
         siteName = uiState.selectedSite.name,
-        siteLatitude = uiState.selectedSite.latitude,
-        siteLongitude = uiState.selectedSite.longitude,
+        onClick = { showSiteDialog = true },
+      )
+
+      // 4. GPS Geofence & Coordinates Telemetry Card (Clean Coordinates & Geofence Status, No Map)
+      BentoGeofenceCoordinatesCard(
+        siteName = uiState.selectedSite.name,
+        latitude = uiState.selectedSite.latitude,
+        longitude = uiState.selectedSite.longitude,
         radiusMeters = uiState.selectedSite.radiusMeters,
-        userLatitude = uiState.deviceLatitude,
-        userLongitude = uiState.deviceLongitude,
         isInside = uiState.isInsideGeofence,
         distanceMeters = uiState.currentDistanceMeters,
+        deviceLatitude = uiState.deviceLatitude,
+        deviceLongitude = uiState.deviceLongitude,
         accuracyMeters = uiState.accuracyMeters,
         isSearchingLocation = uiState.isSearchingLocation,
         locationSearchError = uiState.locationSearchError,
-        isOutsideSimulation = uiState.isOutsideSimulation,
-        onToggleSimulator = if (BuildConfig.DEBUG) {
-          { onToggleSimulator(!uiState.isOutsideSimulation) }
-        } else null,
+        locationSearchSuccess = uiState.locationSearchSuccess,
+        isOnline = uiState.isOnline,
         onRefreshGps = onRefreshGps,
       )
 

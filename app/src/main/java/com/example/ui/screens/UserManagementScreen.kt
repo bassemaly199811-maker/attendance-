@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.DeviceUnknown
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
@@ -65,6 +66,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,6 +93,7 @@ import com.example.ui.theme.BentoOutline
 import com.example.ui.theme.BentoSuccess
 import com.example.ui.theme.BentoSuccessContainer
 import com.example.ui.theme.BentoTextSecondary
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.example.ui.theme.BentoTileGray
 import com.example.ui.theme.BentoWarning
 import com.example.ui.theme.BentoWarningContainer
@@ -106,9 +109,16 @@ fun UserManagementScreen(
   onDeleteUser: (username: String) -> Unit,
   onResetDeviceBinding: (username: String) -> Unit,
   onResolveSecurityAlert: (alertId: Long) -> Unit,
+  initialTab: Int = 0,
+  onClose: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
-  var selectedTab by remember { mutableStateOf(0) }
+  var selectedTab by remember(initialTab) { mutableStateOf(initialTab.coerceIn(0, 1)) }
+
+  LaunchedEffect(initialTab) {
+    selectedTab = initialTab.coerceIn(0, 1)
+  }
+
   var searchQuery by remember { mutableStateOf("") }
   var showAddEditDialog by remember { mutableStateOf(false) }
   var userToEdit by remember { mutableStateOf<UserAccount?>(null) }
@@ -152,19 +162,37 @@ fun UserManagementScreen(
     Column(
       modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp),
     ) {
-      // 1. Header
+      // 1. Header with Back Button and Quick Stats
       Spacer(modifier = Modifier.height(8.dp))
-      Text(
-        text = "User & Access Management",
-        fontSize = 22.sp,
-        fontWeight = FontWeight.Bold,
-        color =  Color.Black,
-      )
-      Text(
-        text = "Manage system credentials, worker linkages, and device bindings",
-        fontSize = 12.5.sp,
-        color = BentoTextSecondary,
-      )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        IconButton(
+          onClick = onClose,
+          modifier = Modifier.size(38.dp),
+        ) {
+          Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back to Dashboard",
+            tint = Color.Black,
+          )
+        }
+        Spacer(modifier = Modifier.width(6.dp))
+        Column(modifier = Modifier.weight(1f)) {
+          Text(
+            text = "User & Access Management",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black,
+          )
+          Text(
+            text = "Credentials, worker bindings, and device security",
+            fontSize = 11.5.sp,
+            color = BentoTextSecondary,
+          )
+        }
+      }
 
       Spacer(modifier = Modifier.height(14.dp))
 
@@ -186,14 +214,45 @@ fun UserManagementScreen(
             }
           },
         )
+        val unresolvedAlertsCount = remember(securityAlerts) {
+          securityAlerts.count { !it.isResolved }
+        }
+
         Tab(
           selected = selectedTab == 1,
           onClick = { selectedTab = 1 },
           text = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(imageVector = Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(16.dp))
+              Icon(
+                imageVector = Icons.Default.Shield,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (unresolvedAlertsCount > 0) BentoError else if (selectedTab == 1) BentoBluePrimary else Color.Gray,
+              )
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Security Alerts (${securityAlerts.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              Text(
+                "Security Alerts (${securityAlerts.size})",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = if (unresolvedAlertsCount > 0 && selectedTab != 1) BentoError else Color.Unspecified,
+              )
+              if (unresolvedAlertsCount > 0) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(
+                  shape = CircleShape,
+                  color = BentoError,
+                  modifier = Modifier.size(18.dp),
+                ) {
+                  Box(contentAlignment = Alignment.Center) {
+                    Text(
+                      text = "$unresolvedAlertsCount",
+                      color = Color.White,
+                      fontSize = 9.sp,
+                      fontWeight = FontWeight.Bold,
+                    )
+                  }
+                }
+              }
             }
           },
         )
@@ -487,28 +546,31 @@ private fun UserAccountCard(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
       ) {
+        val isUserAdmin = user.role == UserRole.ADMIN
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
           Icon(
-            imageVector = Icons.Default.PhoneAndroid,
+            imageVector = if (isUserAdmin) Icons.Default.Devices else Icons.Default.PhoneAndroid,
             contentDescription = null,
-            tint = if (user.boundDeviceId.isNotBlank()) BentoSuccess else BentoTextSecondary,
+            tint = if (isUserAdmin) Color(0xFF673AB7) else if (user.boundDeviceId.isNotBlank()) BentoSuccess else BentoTextSecondary,
             modifier = Modifier.size(16.dp),
           )
           Spacer(modifier = Modifier.width(6.dp))
           Text(
             text =
-              if (user.boundDeviceId.isNotBlank()) {
+              if (isUserAdmin) {
+                "Multi-Device: Open Access (Any Device)"
+              } else if (user.boundDeviceId.isNotBlank()) {
                 "Bound: ${user.boundDeviceModel.ifEmpty { "1 Active Device" }}"
               } else {
                 "Device: Not bound (open)"
               },
             fontSize = 11.5.sp,
-            color = if (user.boundDeviceId.isNotBlank()) Color(0xFF1E293B) else BentoTextSecondary,
-            fontWeight = if (user.boundDeviceId.isNotBlank()) FontWeight.Medium else FontWeight.Normal,
+            color = if (isUserAdmin) Color(0xFF673AB7) else if (user.boundDeviceId.isNotBlank()) Color(0xFF1E293B) else BentoTextSecondary,
+            fontWeight = if (isUserAdmin || user.boundDeviceId.isNotBlank()) FontWeight.Medium else FontWeight.Normal,
           )
         }
 
-        if (user.boundDeviceId.isNotBlank()) {
+        if (!isUserAdmin && user.boundDeviceId.isNotBlank()) {
           TextButton(
             onClick = onResetBinding,
             shape = RoundedCornerShape(8.dp),
@@ -730,8 +792,34 @@ private fun AddEditUserDialog(
           }
         }
 
-        // Link to Worker Profile (for Worker role)
-        if (selectedRole == UserRole.WORKER) {
+        // Multi-Device notice for Admin, or Worker Profile Link for Worker
+        if (selectedRole == UserRole.ADMIN) {
+          Box(
+            modifier =
+              Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFEDE7F6))
+                .padding(10.dp),
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = Icons.Default.Devices,
+                contentDescription = null,
+                tint = Color(0xFF673AB7),
+                modifier = Modifier.size(18.dp),
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = "Admin accounts have multi-device access and can log in from any phone or computer without hardware lock.",
+                fontSize = 11.5.sp,
+                color = Color(0xFF512DA8),
+                fontWeight = FontWeight.Medium,
+                lineHeight = 15.sp,
+              )
+            }
+          }
+        } else {
           Text(text = "Link to Worker Profile", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
           ExposedDropdownMenuBox(
             expanded = workerDropdownExpanded,
@@ -795,6 +883,9 @@ private fun AddEditUserDialog(
               role = selectedRole,
               workerId = workerId,
               workerName = workerName,
+              boundDeviceId = if (selectedRole == UserRole.ADMIN) "" else (userToEdit?.boundDeviceId ?: ""),
+              boundDeviceModel = if (selectedRole == UserRole.ADMIN) "" else (userToEdit?.boundDeviceModel ?: ""),
+              boundDeviceIp = if (selectedRole == UserRole.ADMIN) "" else (userToEdit?.boundDeviceIp ?: ""),
             )
           onSave(account)
         },

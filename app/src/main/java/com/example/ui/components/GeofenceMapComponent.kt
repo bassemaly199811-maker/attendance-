@@ -60,7 +60,7 @@ fun calculateHaversineDistanceMeters(
 }
 
 /**
- * Clean, lightweight 2D Map & GPS Geofence Telemetry Card (Zero WebViews, Light Map Theme)
+ * Clean, lightweight GPS Coordinates & Geofence Telemetry Card (Pure Latitude & Longitude)
  */
 @Composable
 fun BentoGeofenceMapCard(
@@ -75,23 +75,11 @@ fun BentoGeofenceMapCard(
   accuracyMeters: Double = 8.0,
   isSearchingLocation: Boolean = false,
   locationSearchError: String? = null,
-  isOutsideSimulation: Boolean = false,
-  onToggleSimulator: ((Boolean) -> Unit)? = null,
+  showMap: Boolean = false,
   onRefreshGps: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
 ) {
   val formattedDistance = remember(distanceMeters) { formatDistanceClean(distanceMeters) }
-
-  val infiniteTransition = rememberInfiniteTransition(label = "Pulse")
-  val pulseScale by infiniteTransition.animateFloat(
-    initialValue = 0.85f,
-    targetValue = 1.3f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(1500, easing = FastOutSlowInEasing),
-      repeatMode = RepeatMode.Reverse
-    ),
-    label = "PulseScale"
-  )
 
   Surface(
     modifier = modifier.fillMaxWidth(),
@@ -101,8 +89,8 @@ fun BentoGeofenceMapCard(
     shadowElevation = 2.dp,
   ) {
     Column(
-      modifier = Modifier.padding(14.dp),
-      verticalArrangement = Arrangement.spacedBy(10.dp)
+      modifier = Modifier.padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
       // 1. Header Bar: Title, Site Name, Status Badge
       Row(
@@ -116,7 +104,7 @@ fun BentoGeofenceMapCard(
         ) {
           Box(
             modifier = Modifier
-              .size(36.dp)
+              .size(38.dp)
               .clip(CircleShape)
               .background(if (isInside) BentoSuccessContainer else Color(0xFFFFEBEE)),
             contentAlignment = Alignment.Center,
@@ -125,20 +113,20 @@ fun BentoGeofenceMapCard(
               imageVector = if (isInside) Icons.Default.LocationOn else Icons.Default.WrongLocation,
               contentDescription = null,
               tint = if (isInside) BentoSuccess else BentoError,
-              modifier = Modifier.size(20.dp),
+              modifier = Modifier.size(22.dp),
             )
           }
-          Spacer(modifier = Modifier.width(8.dp))
+          Spacer(modifier = Modifier.width(10.dp))
           Column {
             Text(
-              text = "Work Site Geofence",
+              text = "GPS Location & Verification",
               fontWeight = FontWeight.Bold,
-              fontSize = 13.5.sp,
+              fontSize = 14.sp,
               color = Color.Black,
             )
             Text(
-              text = siteName,
-              fontSize = 11.sp,
+              text = "Target: $siteName (${radiusMeters}m radius)",
+              fontSize = 11.5.sp,
               color = BentoTextSecondary,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
@@ -152,23 +140,23 @@ fun BentoGeofenceMapCard(
           color = if (isInside) BentoSuccessContainer else Color(0xFFFFEBEE),
           border = BorderStroke(
             1.dp,
-            if (isInside) BentoSuccess.copy(alpha = 0.4f) else Color(0xFFFFCDD2)
+            if (isInside) BentoSuccess.copy(alpha = 0.5f) else Color(0xFFFFCDD2)
           ),
         ) {
           Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
           ) {
             Box(
               modifier = Modifier
-                .size(7.dp)
+                .size(8.dp)
                 .clip(CircleShape)
                 .background(if (isInside) BentoSuccess else BentoError)
             )
             Text(
-              text = if (isInside) "Inside ($formattedDistance)" else "Outside ($formattedDistance)",
-              fontSize = 10.5.sp,
+              text = if (isInside) "Inside Zone ($formattedDistance)" else "Outside Zone ($formattedDistance)",
+              fontSize = 11.sp,
               fontWeight = FontWeight.Bold,
               color = if (isInside) BentoSuccess else BentoError,
             )
@@ -176,315 +164,207 @@ fun BentoGeofenceMapCard(
         }
       }
 
-      // 2. Crisp Light Map Canvas
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .height(200.dp)
-          .clip(RoundedCornerShape(14.dp))
-          .background(Color(0xFFF1F5F9))
-          .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(14.dp)),
+      // 2. Telemetry Grid: Device Location vs Work Site Location
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
       ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-          val centerX = size.width / 2f
-          val centerY = size.height / 2f
-          val maxRadius = min(size.width, size.height) * 0.42f
-
-          // A. Light map terrain base
-          drawRect(color = Color(0xFFF8FAFC))
-
-          // City blocks & landscape
-          drawRoundRect(
-            color = Color(0xFFDCFCE7),
-            topLeft = Offset(15f, 15f),
-            size = Size(size.width * 0.28f, size.height * 0.35f),
-            cornerRadius = CornerRadius(8f, 8f)
-          )
-          drawRoundRect(
-            color = Color(0xFFE2E8F0),
-            topLeft = Offset(size.width * 0.65f, 20f),
-            size = Size(size.width * 0.3f, size.height * 0.38f),
-            cornerRadius = CornerRadius(8f, 8f)
-          )
-          drawRoundRect(
-            color = Color(0xFFE0F2FE),
-            topLeft = Offset(20f, size.height * 0.65f),
-            size = Size(size.width * 0.35f, size.height * 0.28f),
-            cornerRadius = CornerRadius(8f, 8f)
-          )
-
-          // Major Streets
-          val streetWidth = 24f
-          drawRect(
-            color = Color(0xFFCBD5E1),
-            topLeft = Offset(0f, centerY - streetWidth / 2f - 1.5f),
-            size = Size(size.width, streetWidth + 3f)
-          )
-          drawRect(
-            color = Color.White,
-            topLeft = Offset(0f, centerY - streetWidth / 2f),
-            size = Size(size.width, streetWidth)
-          )
-          drawRect(
-            color = Color(0xFFCBD5E1),
-            topLeft = Offset(centerX - streetWidth / 2f - 1.5f, 0f),
-            size = Size(streetWidth + 3f, size.height)
-          )
-          drawRect(
-            color = Color.White,
-            topLeft = Offset(centerX - streetWidth / 2f, 0f),
-            size = Size(streetWidth, size.height)
-          )
-
-          // B. Geofence Perimeter Ring
-          val perimeterRadius = maxRadius * 0.60f
-          val zoneColor = if (isInside) Color(0xFF10B981) else Color(0xFFEF4444)
-
-          drawCircle(
-            color = zoneColor.copy(alpha = 0.16f),
-            radius = perimeterRadius,
-            center = Offset(centerX, centerY),
-          )
-          drawCircle(
-            color = zoneColor,
-            radius = perimeterRadius,
-            center = Offset(centerX, centerY),
-            style = Stroke(width = 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
-          )
-
-          // C. Center Work Site Pin
-          val pinPath = Path().apply {
-            moveTo(centerX, centerY + 2f)
-            cubicTo(centerX - 12f, centerY - 12f, centerX - 12f, centerY - 24f, centerX, centerY - 24f)
-            cubicTo(centerX + 12f, centerY - 24f, centerX + 12f, centerY - 12f, centerX, centerY + 2f)
-            close()
-          }
-          drawPath(path = pinPath, color = Color(0xFF2563EB), style = Fill)
-          drawPath(path = pinPath, color = Color.White, style = Stroke(width = 1.5f))
-          drawCircle(color = Color.White, radius = 3.5f, center = Offset(centerX, centerY - 16f))
-
-          // D. User Device Pin
-          val dLat = userLatitude - siteLatitude
-          val dLng = userLongitude - siteLongitude
-          val rawAngle = atan2(dLat, dLng)
-
-          val ratio = if (radiusMeters > 0) (distanceMeters / radiusMeters.toDouble()) else 0.0
-          val userVisualDist = when {
-            distanceMeters <= 5.0 -> 0f
-            isInside -> (perimeterRadius * (ratio.toFloat()).coerceIn(0.2f, 0.88f))
-            else -> (perimeterRadius + (maxRadius - perimeterRadius) * (ratio.toFloat() - 1f).coerceIn(0.2f, 1.0f)).coerceAtMost(maxRadius * 0.95f)
-          }
-
-          val userX = centerX + userVisualDist * cos(rawAngle).toFloat()
-          val userY = centerY - userVisualDist * sin(rawAngle).toFloat()
-
-          // Dotted Connection Line between Site and User
-          drawLine(
-            color = zoneColor,
-            start = Offset(centerX, centerY),
-            end = Offset(userX, userY),
-            strokeWidth = 2f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))
-          )
-
-          // User Pulse Wave
-          drawCircle(
-            color = zoneColor.copy(alpha = 0.25f),
-            radius = 16f * pulseScale,
-            center = Offset(userX, userY)
-          )
-          drawCircle(
-            color = zoneColor,
-            radius = 7.5f,
-            center = Offset(userX, userY)
-          )
-          drawCircle(
-            color = Color.White,
-            radius = 3.5f,
-            center = Offset(userX, userY)
-          )
-        }
-
-        // Top Start Overlay: Distance & Perimeter Info
+        // Device Current GPS Card
         Surface(
-          modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(8.dp),
-          shape = RoundedCornerShape(8.dp),
-          color = Color.White.copy(alpha = 0.95f),
-          border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
-          shadowElevation = 2.dp,
+          modifier = Modifier.weight(1f),
+          shape = RoundedCornerShape(14.dp),
+          color = Color(0xFFF8FAFC),
+          border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
         ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+          Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
           ) {
-            Icon(
-              imageVector = Icons.Default.NearMe,
-              contentDescription = null,
-              tint = if (isInside) BentoSuccess else BentoError,
-              modifier = Modifier.size(13.dp),
-            )
-            Text(
-              text = "Distance: $formattedDistance",
-              fontSize = 11.sp,
-              fontWeight = FontWeight.Bold,
-              color = Color.Black,
-            )
-            Text(
-              text = "• Allowed: ${radiusMeters}m",
-              fontSize = 10.sp,
-              color = BentoTextSecondary,
-            )
-          }
-        }
-
-        // Top End Overlay: GPS Refresh Button
-        Surface(
-          modifier = Modifier
-            .align(Alignment.TopEnd)
-            .padding(8.dp),
-          shape = CircleShape,
-          color = Color.White.copy(alpha = 0.95f),
-          border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
-          shadowElevation = 2.dp,
-        ) {
-          IconButton(
-            onClick = { onRefreshGps?.invoke() },
-            modifier = Modifier.size(34.dp),
-          ) {
-            if (isSearchingLocation) {
-              CircularProgressIndicator(
-                modifier = Modifier.size(15.dp),
-                strokeWidth = 2.dp,
-                color = BentoBluePrimary,
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(Icons.Default.MyLocation, contentDescription = null, tint = BentoBluePrimary, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = "Device Live GPS",
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1E293B),
               )
-            } else {
-              Icon(
-                imageVector = Icons.Default.MyLocation,
-                contentDescription = "Refresh GPS",
-                tint = BentoBluePrimary,
-                modifier = Modifier.size(18.dp),
+            }
+            HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text("Latitude:", fontSize = 10.5.sp, color = BentoTextSecondary)
+              Text(
+                String.format(Locale.ENGLISH, "%.6f", userLatitude),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+              )
+            }
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text("Longitude:", fontSize = 10.5.sp, color = BentoTextSecondary)
+              Text(
+                String.format(Locale.ENGLISH, "%.6f", userLongitude),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+              )
+            }
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text("Accuracy:", fontSize = 10.5.sp, color = BentoTextSecondary)
+              Text(
+                "±${accuracyMeters.toInt()}m",
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (accuracyMeters <= 20) BentoSuccess else Color(0xFFD97706),
               )
             }
           }
         }
 
-        // Bottom Coordinates Telemetry Bar
+        // Target Site Coordinates Card
         Surface(
-          modifier = Modifier
-            .align(Alignment.BottomStart)
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-          shape = RoundedCornerShape(6.dp),
-          color = Color.White.copy(alpha = 0.92f),
+          modifier = Modifier.weight(1f),
+          shape = RoundedCornerShape(14.dp),
+          color = Color(0xFFF8FAFC),
           border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
         ) {
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text(
-              text = "📍 Device: ${String.format(Locale.ENGLISH, "%.4f, %.4f", userLatitude, userLongitude)} (±${accuracyMeters.toInt()}m)",
-              color = Color(0xFF334155),
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Medium,
-            )
-            Text(
-              text = "🏢 Site: ${String.format(Locale.ENGLISH, "%.4f, %.4f", siteLatitude, siteLongitude)}",
-              color = BentoTextSecondary,
-              fontSize = 9.5.sp,
-            )
-          }
-        }
-      }
-
-      // 3. Diagnostics Status Bar
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text(
-            text = if (isInside) "✓ Device is within authorized work zone" else "⚠️ Device is outside authorized work zone",
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isInside) BentoSuccess else BentoError,
-          )
-          Text(
-            text = "Site: $siteName • Perimeter Radius: ${radiusMeters}m",
-            fontSize = 10.sp,
-            color = BentoTextSecondary,
-          )
-        }
-
-        if (onRefreshGps != null) {
-          FilledTonalButton(
-            onClick = onRefreshGps,
-            shape = RoundedCornerShape(10.dp),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-            modifier = Modifier.height(32.dp),
-            colors = ButtonDefaults.filledTonalButtonColors(
-              containerColor = BentoBlueContainer,
-              contentColor = BentoBluePrimary,
-            ),
-          ) {
-            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(13.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Refresh GPS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-          }
-        }
-      }
-
-      // 4. Offline Simulator Switch
-      if (onToggleSimulator != null) {
-        Surface(
-          modifier = Modifier.fillMaxWidth(),
-          shape = RoundedCornerShape(10.dp),
-          color = Color(0xFFF8FAFC),
-          border = BorderStroke(1.dp, BentoOutline),
-        ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+          Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
           ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(
-                imageVector = Icons.Default.Science,
-                contentDescription = null,
-                tint = BentoTextSecondary,
-                modifier = Modifier.size(14.dp),
-              )
+              Icon(Icons.Default.Business, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(6.dp))
               Text(
-                text = "Geofence Testing Simulator",
+                text = "Site Coordinates",
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1E293B),
+              )
+            }
+            HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text("Latitude:", fontSize = 10.5.sp, color = BentoTextSecondary)
+              Text(
+                String.format(Locale.ENGLISH, "%.6f", siteLatitude),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+              )
+            }
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text("Longitude:", fontSize = 10.5.sp, color = BentoTextSecondary)
+              Text(
+                String.format(Locale.ENGLISH, "%.6f", siteLongitude),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+              )
+            }
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text("Radius:", fontSize = 10.5.sp, color = BentoTextSecondary)
+              Text(
+                "${radiusMeters}m",
                 fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = BentoBluePrimary,
+              )
+            }
+          }
+        }
+      }
+
+      // 3. Dynamic Animated Radar Scope View (Shown only if showMap is true)
+      if (showMap) {
+        LiveRadarScopeView(
+          isInside = isInside,
+          distanceMeters = distanceMeters,
+          radiusMeters = radiusMeters,
+          accuracyMeters = accuracyMeters,
+        )
+      }
+
+      // 4. Distance & Geofence Verification Banner
+      Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isInside) BentoSuccessContainer.copy(alpha = 0.6f) else Color(0xFFFFEBEE),
+        border = BorderStroke(1.dp, if (isInside) BentoSuccess.copy(alpha = 0.3f) else Color(0xFFFFCDD2)),
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Icon(
+              imageVector = if (isInside) Icons.Default.CheckCircle else Icons.Default.Warning,
+              contentDescription = null,
+              tint = if (isInside) BentoSuccess else BentoError,
+              modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text(
+                text = if (isInside) "Inside Authorized Zone ($formattedDistance to center)" else "Outside Authorized Zone ($formattedDistance away)",
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isInside) BentoSuccess else BentoError,
+              )
+              Text(
+                text = "Allowed geofence threshold: ${radiusMeters} meters",
+                fontSize = 10.sp,
                 color = BentoTextSecondary,
               )
             }
+          }
 
-            FilterChip(
-              selected = isOutsideSimulation,
-              onClick = { onToggleSimulator(!isOutsideSimulation) },
-              label = {
-                Text(
-                  if (isOutsideSimulation) "Simulating: Outside" else "Live GPS Mode",
-                  fontSize = 10.sp,
-                  fontWeight = FontWeight.Bold,
-                )
-              },
-              colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = Color(0xFFFFEBEE),
-                selectedLabelColor = BentoError,
+          if (onRefreshGps != null) {
+            val refreshInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            Button(
+              onClick = onRefreshGps,
+              enabled = !isSearchingLocation,
+              interactionSource = refreshInteraction,
+              shape = RoundedCornerShape(10.dp),
+              colors = ButtonDefaults.buttonColors(
+                containerColor = BentoBluePrimary,
+                contentColor = Color.White,
               ),
-              modifier = Modifier.height(28.dp),
-            )
+              contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+              modifier = Modifier
+                .height(34.dp)
+                .bounceOnPress(refreshInteraction, scaleDown = 0.92f),
+            ) {
+              if (isSearchingLocation) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(14.dp),
+                  strokeWidth = 2.dp,
+                  color = Color.White,
+                )
+              } else {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Refresh", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+              }
+            }
           }
         }
       }
@@ -505,6 +385,258 @@ fun BentoGeofenceMapCard(
             Spacer(modifier = Modifier.width(6.dp))
             Text(text = locationSearchError, fontSize = 10.sp, color = BentoError)
           }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Dynamic Animated Satellite Radar Scope View
+ * Renders an authentic live radar screen with rotating sweep line, concentric geofence rings,
+ * pulsing target beacon, and compass orientation.
+ */
+@Composable
+fun LiveRadarScopeView(
+  isInside: Boolean,
+  distanceMeters: Double,
+  radiusMeters: Int,
+  accuracyMeters: Double,
+  modifier: Modifier = Modifier,
+) {
+  val infiniteTransition = rememberInfiniteTransition(label = "radarScanner")
+
+  val sweepAngle by infiniteTransition.animateFloat(
+    initialValue = 0f,
+    targetValue = 360f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(durationMillis = 3600, easing = LinearEasing),
+      repeatMode = RepeatMode.Restart,
+    ),
+    label = "radarSweepAngle",
+  )
+
+  val pulseRadius by infiniteTransition.animateFloat(
+    initialValue = 0f,
+    targetValue = 1f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+      repeatMode = RepeatMode.Restart,
+    ),
+    label = "radarPulse",
+  )
+
+  Surface(
+    modifier = modifier
+      .fillMaxWidth()
+      .height(148.dp)
+      .clip(RoundedCornerShape(16.dp)),
+    shape = RoundedCornerShape(16.dp),
+    color = Color(0xFF070E1E),
+    border = BorderStroke(1.dp, Color(0xFF1E293B)),
+    shadowElevation = 2.dp,
+  ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+      Canvas(modifier = Modifier.fillMaxSize()) {
+        val centerX = size.width / 2f
+        val centerY = size.height / 2f
+        val maxRadius = minOf(centerX, centerY) - 14.dp.toPx()
+        val center = Offset(centerX, centerY)
+
+        // Crosshairs
+        drawLine(
+          color = Color(0xFF1E3A8A).copy(alpha = 0.35f),
+          start = Offset(centerX - maxRadius, centerY),
+          end = Offset(centerX + maxRadius, centerY),
+          strokeWidth = 1.dp.toPx(),
+          pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
+        )
+        drawLine(
+          color = Color(0xFF1E3A8A).copy(alpha = 0.35f),
+          start = Offset(centerX, centerY - maxRadius),
+          end = Offset(centerX, centerY + maxRadius),
+          strokeWidth = 1.dp.toPx(),
+          pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
+        )
+
+        // Concentric distance rings
+        listOf(0.33f, 0.66f, 1f).forEach { fraction ->
+          val r = maxRadius * fraction
+          drawCircle(
+            color = Color(0xFF1E3A8A).copy(alpha = 0.3f),
+            radius = r,
+            center = center,
+            style = Stroke(width = 1.dp.toPx()),
+          )
+        }
+
+        // Geofence perimeter zone (boundary)
+        val geofenceRadius = maxRadius * 0.70f
+        val geofenceColor = if (isInside) BentoSuccess else Color(0xFFEF4444)
+        drawCircle(
+          color = geofenceColor.copy(alpha = 0.16f),
+          radius = geofenceRadius,
+          center = center,
+          style = Fill,
+        )
+        drawCircle(
+          color = geofenceColor.copy(alpha = 0.75f),
+          radius = geofenceRadius,
+          center = center,
+          style = Stroke(
+            width = 1.8.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)),
+          ),
+        )
+
+        // Animated rotating radar sweep beam with sweep gradient
+        drawArc(
+          brush = Brush.sweepGradient(
+            0.0f to Color.Transparent,
+            0.82f to Color.Transparent,
+            1.0f to if (isInside) Color(0x5000E676) else Color(0x5038BDF8),
+            center = center,
+          ),
+          startAngle = sweepAngle - 90f,
+          sweepAngle = 90f,
+          useCenter = true,
+          topLeft = Offset(centerX - maxRadius, centerY - maxRadius),
+          size = Size(maxRadius * 2f, maxRadius * 2f),
+        )
+
+        // Radar sweep line
+        val angleRad = Math.toRadians(sweepAngle.toDouble())
+        val lineEndX = centerX + (maxRadius * cos(angleRad)).toFloat()
+        val lineEndY = centerY + (maxRadius * sin(angleRad)).toFloat()
+        drawLine(
+          color = if (isInside) Color(0xFF00E676).copy(alpha = 0.85f) else Color(0xFF38BDF8).copy(alpha = 0.85f),
+          start = center,
+          end = Offset(lineEndX, lineEndY),
+          strokeWidth = 1.5.dp.toPx(),
+        )
+
+        // Center Site Marker (Target Site)
+        drawCircle(
+          color = BentoBluePrimary,
+          radius = 5.dp.toPx(),
+          center = center,
+        )
+        drawCircle(
+          color = Color.White,
+          radius = 2.dp.toPx(),
+          center = center,
+        )
+
+        // User device location calculation on the radar
+        val distanceRatio = if (radiusMeters > 0) (distanceMeters / radiusMeters).toFloat() else 0f
+        val userRadiusOffset = if (isInside) {
+          (distanceRatio * geofenceRadius * 0.85f).coerceIn(0f, geofenceRadius - 6.dp.toPx())
+        } else {
+          (geofenceRadius + 12.dp.toPx()).coerceIn(geofenceRadius + 4.dp.toPx(), maxRadius - 6.dp.toPx())
+        }
+        val userAngle = if (isInside) 0.85 else 1.15
+        val userX = centerX + (userRadiusOffset * cos(userAngle)).toFloat()
+        val userY = centerY + (userRadiusOffset * sin(userAngle)).toFloat()
+        val userPos = Offset(userX, userY)
+
+        // Pulsing ripple around user beacon
+        val userColor = if (isInside) Color(0xFF00E676) else Color(0xFFEF4444)
+        drawCircle(
+          color = userColor.copy(alpha = (1f - pulseRadius) * 0.7f),
+          radius = 5.dp.toPx() + (pulseRadius * 15.dp.toPx()),
+          center = userPos,
+          style = Stroke(width = 1.5.dp.toPx()),
+        )
+        // Solid user beacon
+        drawCircle(
+          color = userColor,
+          radius = 4.5.dp.toPx(),
+          center = userPos,
+        )
+        drawCircle(
+          color = Color.White,
+          radius = 2.dp.toPx(),
+          center = userPos,
+        )
+      }
+
+      // HUD Header Bar
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 12.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(
+            modifier = Modifier
+              .size(7.dp)
+              .clip(CircleShape)
+              .background(if (isInside) Color(0xFF00E676) else Color(0xFFF59E0B)),
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(
+            text = "LIVE SATELLITE RADAR",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color(0xFF94A3B8),
+            letterSpacing = 1.sp,
+          )
+        }
+
+        Surface(
+          shape = RoundedCornerShape(6.dp),
+          color = Color(0xFF1E293B).copy(alpha = 0.85f),
+          border = BorderStroke(0.5.dp, Color(0xFF334155)),
+        ) {
+          Text(
+            text = if (isInside) "IN GEOFENCE ✓" else "OUT OF GEOFENCE ⚠️",
+            fontSize = 8.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isInside) Color(0xFF00E676) else Color(0xFFEF4444),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+          )
+        }
+      }
+
+      // Compass indicators
+      Text(
+        text = "N",
+        fontSize = 8.5.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color(0xFF64748B),
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .padding(top = 22.dp),
+      )
+      Text(
+        text = "S",
+        fontSize = 8.5.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color(0xFF64748B),
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(bottom = 3.dp),
+      )
+
+      // Bottom Legend overlay
+      Row(
+        modifier = Modifier
+          .align(Alignment.BottomStart)
+          .padding(start = 12.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(BentoBluePrimary))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("Site Center", fontSize = 8.5.sp, color = Color(0xFF94A3B8))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(if (isInside) Color(0xFF00E676) else Color(0xFFEF4444)))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("You (±${accuracyMeters.toInt()}m)", fontSize = 8.5.sp, color = Color(0xFF94A3B8))
         }
       }
     }

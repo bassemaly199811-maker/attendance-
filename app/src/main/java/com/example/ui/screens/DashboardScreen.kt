@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
@@ -80,6 +81,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -88,9 +90,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import com.example.ui.components.bounceClick
 import com.example.data.model.ActivityLog
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceStatus
+import com.example.data.model.DeviceSecurityAlert
 import com.example.data.model.DocumentAlert
 import com.example.data.model.DocumentExpiryStatus
 import com.example.data.model.DocumentType
@@ -130,6 +134,7 @@ fun DashboardScreen(
   isOnline: Boolean = true,
   allLeaveRequests: List<LeaveRequest> = emptyList(),
   allLeaveBalances: List<LeaveBalance> = emptyList(),
+  securityAlerts: List<DeviceSecurityAlert> = emptyList(),
   onAddNewSite: (name: String, lat: Double, lng: Double, radius: Int, address: String) -> Unit,
   onUpdateSite: (WorkSite) -> Unit,
   onDeleteSite: (String) -> Unit,
@@ -193,6 +198,7 @@ fun DashboardScreen(
   lastSyncTime: String? = null,
   onRefresh: () -> Unit = {},
   onNavigateToUserManagement: () -> Unit = {},
+  onNavigateToSecurityAlerts: () -> Unit = {},
   onNavigateToLeaveApprovals: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
@@ -255,6 +261,8 @@ fun DashboardScreen(
   var attendanceSearchQuery by remember { mutableStateOf("") }
   var selectedAttendanceStatus by remember { mutableStateOf<AttendanceStatus?>(null) }
   var isWorkerDropdownExpanded by remember { mutableStateOf(false) }
+  var isWorkersExpanded by remember { mutableStateOf(false) }
+  var isAuditLogsExpanded by remember { mutableStateOf(false) }
 
   val filteredWorkers = remember(workers, attendanceSearchQuery, selectedAttendanceStatus) {
     workers.filter { worker ->
@@ -367,12 +375,54 @@ fun DashboardScreen(
             }
           }
         }
+
+        val unresolvedAlertsCount = remember(securityAlerts) {
+          securityAlerts.count { !it.isResolved }
+        }
+
+        OutlinedButton(
+          onClick = onNavigateToSecurityAlerts,
+          modifier = Modifier.weight(1f).height(42.dp),
+          shape = RoundedCornerShape(12.dp),
+          border = BorderStroke(1.dp, if (unresolvedAlertsCount > 0) BentoError.copy(alpha = 0.6f) else Color(0xFF673AB7).copy(alpha = 0.5f)),
+        ) {
+          Icon(
+            Icons.Default.Shield,
+            contentDescription = null,
+            tint = if (unresolvedAlertsCount > 0) BentoError else Color(0xFF673AB7),
+            modifier = Modifier.size(16.dp),
+          )
+          Spacer(modifier = Modifier.width(4.dp))
+          Text(
+            "Alerts",
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (unresolvedAlertsCount > 0) BentoError else Color(0xFF673AB7),
+          )
+          if (unresolvedAlertsCount > 0) {
+            Spacer(modifier = Modifier.width(4.dp))
+            Surface(
+              shape = CircleShape,
+              color = BentoError,
+              modifier = Modifier.size(18.dp),
+            ) {
+              Box(contentAlignment = Alignment.Center) {
+                Text(
+                  text = if (unresolvedAlertsCount > 99) "99+" else "$unresolvedAlertsCount",
+                  color = Color.White,
+                  fontSize = 9.sp,
+                  fontWeight = FontWeight.Bold,
+                )
+              }
+            }
+          }
+        }
       }
 
 
       // 2. Cloud Sync & Firestore Status Bar
       Card(
-        modifier = Modifier.fillMaxWidth().clickable { onRefresh() },
+        modifier = Modifier.fillMaxWidth().bounceClick(scaleDown = 0.98f) { onRefresh() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = BentoBlueContainer.copy(alpha = 0.6f)),
         border = BorderStroke(1.dp, BentoBluePrimary.copy(alpha = 0.2f)),
@@ -470,13 +520,17 @@ fun DashboardScreen(
               contentColor = BentoWarning,
               modifier = Modifier.weight(1f),
             )
+            val unresolvedAlertsCount = remember(securityAlerts) {
+              securityAlerts.count { !it.isResolved }
+            }
             BentoStatCard(
               title = "Device Security",
-              value = "100%",
-              subtitle = "Approved Biometrics",
+              value = if (unresolvedAlertsCount > 0) "$unresolvedAlertsCount Alert${if (unresolvedAlertsCount > 1) "s" else ""}" else "Protected",
+              subtitle = if (unresolvedAlertsCount > 0) "Tap to review alerts" else "Hardware bound",
               icon = Icons.Default.Shield,
-              containerColor = BentoLilac,
-              contentColor = BentoLilacText,
+              containerColor = if (unresolvedAlertsCount > 0) Color(0xFFFFEBEE) else BentoLilac,
+              contentColor = if (unresolvedAlertsCount > 0) BentoError else BentoLilacText,
+              onClick = onNavigateToSecurityAlerts,
               modifier = Modifier.weight(1f),
             )
           }
@@ -877,12 +931,37 @@ fun DashboardScreen(
               )
             }
           } else {
-            LazyColumn(
+            val displayedWorkers = if (isWorkersExpanded) filteredWorkers else filteredWorkers.take(3)
+            Column(
               verticalArrangement = Arrangement.spacedBy(8.dp),
-              modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+              modifier = Modifier.fillMaxWidth(),
             ) {
-              items(filteredWorkers, key = { "${it.id}_${it.fullName}" }) { worker ->
+              displayedWorkers.forEach { worker ->
                 DashboardWorkerAttendanceItem(worker = worker)
+              }
+            }
+
+            if (filteredWorkers.size > 3) {
+              OutlinedButton(
+                onClick = { isWorkersExpanded = !isWorkersExpanded },
+                modifier = Modifier.fillMaxWidth().height(38.dp),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, BentoBluePrimary.copy(alpha = 0.35f)),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = BentoBlueContainer.copy(alpha = 0.3f)),
+              ) {
+                Icon(
+                  imageVector = if (isWorkersExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                  contentDescription = null,
+                  tint = BentoBluePrimary,
+                  modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = if (isWorkersExpanded) "Show Less" else "See More (${filteredWorkers.size - 3} more staff)",
+                  fontSize = 12.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = BentoBluePrimary,
+                )
               }
             }
           }
@@ -931,8 +1010,9 @@ fun DashboardScreen(
           if (activityLogs.isEmpty()) {
             Text("No activity logs recorded yet.", fontSize = 12.sp, color = BentoTextSecondary)
           } else {
+            val displayedLogs = if (isAuditLogsExpanded) activityLogs.take(25) else activityLogs.take(3)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-              activityLogs.take(5).forEach { log ->
+              displayedLogs.forEach { log ->
                 Row(
                   modifier = Modifier.fillMaxWidth(),
                   horizontalArrangement = Arrangement.SpaceBetween,
@@ -952,6 +1032,30 @@ fun DashboardScreen(
                     )
                   }
                   Text(text = log.timestamp, fontSize = 10.sp, color = BentoTextSecondary)
+                }
+              }
+
+              if (activityLogs.size > 3) {
+                OutlinedButton(
+                  onClick = { isAuditLogsExpanded = !isAuditLogsExpanded },
+                  modifier = Modifier.fillMaxWidth().height(36.dp),
+                  shape = RoundedCornerShape(10.dp),
+                  border = BorderStroke(1.dp, BentoLilacText.copy(alpha = 0.35f)),
+                  colors = ButtonDefaults.outlinedButtonColors(containerColor = BentoLilac.copy(alpha = 0.4f)),
+                ) {
+                  Icon(
+                    imageVector = if (isAuditLogsExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = BentoLilacText,
+                    modifier = Modifier.size(16.dp),
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text(
+                    text = if (isAuditLogsExpanded) "Show Less" else "See More (${activityLogs.size - 3} more logs)",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BentoLilacText,
+                  )
                 }
               }
             }
@@ -974,6 +1078,9 @@ private fun DashboardDocumentAlertsSection(
   onViewAllClick: () -> Unit,
 ) {
   if (alerts.isEmpty()) return
+
+  var isExpanded by remember { mutableStateOf(false) }
+  val displayedAlerts = if (isExpanded) alerts else alerts.take(3)
 
   Card(
     modifier = Modifier.fillMaxWidth().testTag("dashboard_document_alerts_box"),
@@ -1035,7 +1142,7 @@ private fun DashboardDocumentAlertsSection(
 
       // List of Alert Cards
       Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        alerts.take(4).forEach { alert ->
+        displayedAlerts.forEach { alert ->
           Surface(
             modifier = Modifier.fillMaxWidth().clickable { onAlertClick(alert) },
             shape = RoundedCornerShape(12.dp),
@@ -1090,6 +1197,30 @@ private fun DashboardDocumentAlertsSection(
                 )
               }
             }
+          }
+        }
+
+        if (alerts.size > 3) {
+          OutlinedButton(
+            onClick = { isExpanded = !isExpanded },
+            modifier = Modifier.fillMaxWidth().height(36.dp),
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, Color(0xFFE65100).copy(alpha = 0.4f)),
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFFFFECB3).copy(alpha = 0.5f)),
+          ) {
+            Icon(
+              imageVector = if (isExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+              contentDescription = null,
+              tint = Color(0xFFE65100),
+              modifier = Modifier.size(16.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+              text = if (isExpanded) "Show Less" else "See More (${alerts.size - 3} more alerts)",
+              fontSize = 11.5.sp,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFFE65100),
+            )
           }
         }
       }
@@ -1164,10 +1295,15 @@ private fun BentoStatCard(
   icon: ImageVector,
   containerColor: Color,
   contentColor: Color,
+  onClick: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
 ) {
   Card(
-    modifier = modifier,
+    modifier = modifier
+      .shadow(elevation = 3.dp, shape = RoundedCornerShape(20.dp), spotColor = containerColor.copy(alpha = 0.35f))
+      .bounceClick(scaleDown = 0.96f) {
+        onClick?.invoke()
+      },
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = containerColor),
   ) {
