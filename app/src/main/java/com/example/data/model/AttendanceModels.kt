@@ -473,4 +473,56 @@ fun getWorkerDocumentAlerts(workers: List<WorkerEntity>): List<DocumentAlert> {
   return alerts.sortedBy { it.daysRemaining }
 }
 
+val AttendanceRecord.date: String
+  get() = workDate
+
+val AttendanceRecord.workDurationHours: Double
+  get() {
+    if (checkInTime.isNullOrBlank() || checkOutTime.isNullOrBlank()) return 0.0
+    val formats = listOf(
+      java.text.SimpleDateFormat("hh:mm:ss a", java.util.Locale.ENGLISH),
+      java.text.SimpleDateFormat("h:mm:ss a", java.util.Locale.ENGLISH),
+      java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH),
+      java.text.SimpleDateFormat("h:mm a", java.util.Locale.ENGLISH),
+      java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ENGLISH),
+      java.text.SimpleDateFormat("HH:mm", java.util.Locale.ENGLISH),
+    )
+    var parsedIn: java.util.Date? = null
+    var parsedOut: java.util.Date? = null
+    for (f in formats) {
+      if (parsedIn == null) {
+        try { parsedIn = f.parse(checkInTime.trim()) } catch (_: Exception) {}
+      }
+      if (parsedOut == null) {
+        try { parsedOut = f.parse(checkOutTime.trim()) } catch (_: Exception) {}
+      }
+    }
+    if (parsedIn == null || parsedOut == null) return 0.0
+    var diff = parsedOut.time - parsedIn.time
+    if (diff < 0) diff += 24 * 60 * 60 * 1000
+    return diff / (1000.0 * 60.0 * 60.0)
+  }
+
+val AttendanceRecord.isMissingCheckOut: Boolean
+  get() {
+    if (checkInTime.isNullOrBlank()) return false
+    val noteStr = notes ?: ""
+    if (noteStr.contains("لم يتم تسجيل الخروج") ||
+      noteStr.contains("Auto-Closed", ignoreCase = true) ||
+      noteStr.contains("Missing Check-Out", ignoreCase = true) ||
+      noteStr.contains("غير مكتمل", ignoreCase = true)
+    ) {
+      return true
+    }
+    return checkOutTime.isNullOrBlank()
+  }
+
+val AttendanceRecord.isFullyCompleted: Boolean
+  get() {
+    return !checkInTime.isNullOrBlank() &&
+      !checkOutTime.isNullOrBlank() &&
+      !isMissingCheckOut
+  }
+
+
 

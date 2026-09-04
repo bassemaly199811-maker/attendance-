@@ -272,6 +272,7 @@ fun WorkAttendanceApp(
             allLeaveRequests = allLeaveRequests,
             allLeaveBalances = allLeaveBalances,
             securityAlerts = allSecurityAlerts,
+            users = allUsers,
             isRefreshing = uiState.isRefreshing,
             lastSyncTime = uiState.lastSyncTime,
             onRefresh = { viewModel.refreshFromCloud() },
@@ -310,8 +311,53 @@ fun WorkAttendanceApp(
                 sickLeave,
               )
             },
+            onAddNewWorkerWithAccount = { name, role, siteId, siteName, nationalId, phone, device, isApproved, assignedIds, assignedNames, iqamaNum, iqamaStart, iqamaEnd, insNum, insProvider, insStart, insEnd, passport, nationality, contractEnd, salary, hireDate, employmentEndDate, annualLeave, casualLeave, sickLeave, username, password, userRole, createAccount ->
+              viewModel.addNewWorkerWithAccount(
+                fullName = name,
+                role = role,
+                siteId = siteId,
+                siteName = siteName,
+                nationalId = nationalId,
+                phone = phone,
+                deviceModel = device,
+                isApproved = isApproved,
+                assignedSiteIds = assignedIds,
+                assignedSiteNames = assignedNames,
+                iqamaNumber = iqamaNum,
+                iqamaStartDate = iqamaStart,
+                iqamaEndDate = iqamaEnd,
+                insuranceNumber = insNum,
+                insuranceProvider = insProvider,
+                insuranceStartDate = insStart,
+                insuranceEndDate = insEnd,
+                passportNumber = passport,
+                nationality = nationality,
+                contractEndDate = contractEnd,
+                salary = salary,
+                hireDate = hireDate,
+                employmentEndDate = employmentEndDate,
+                annualLeaveTotal = annualLeave,
+                casualLeaveTotal = casualLeave,
+                sickLeaveTotal = sickLeave,
+                username = if (createAccount && username.isNotBlank()) username else null,
+                passwordPlain = if (createAccount && password.isNotBlank()) password else null,
+                userRole = userRole,
+              )
+            },
             onUpdateWorker = { viewModel.updateWorker(it) },
+            onUpdateWorkerWithAccount = { worker, _, newUsername, newPassword, newRole, resetDevice ->
+              viewModel.updateWorkerWithAccount(
+                worker = worker,
+                username = newUsername,
+                passwordPlain = newPassword,
+                userRole = newRole,
+                resetDeviceBinding = resetDevice,
+              )
+            },
             onDeleteWorker = { viewModel.deleteWorker(it) },
+            onResetDeviceBinding = { username ->
+              viewModel.resetDeviceBindingForUser(username)
+            },
             onUpdateLeaveBalance = { workerId, annual, casual, sick, annualUsed, casualUsed, sickUsed ->
               viewModel.updateWorkerLeaveBalance(workerId, annual, casual, sick, annualUsed, casualUsed, sickUsed)
             },

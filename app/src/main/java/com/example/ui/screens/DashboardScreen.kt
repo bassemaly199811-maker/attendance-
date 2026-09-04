@@ -101,11 +101,14 @@ import com.example.data.model.DocumentType
 import com.example.data.model.LeaveBalance
 import com.example.data.model.LeaveRequest
 import com.example.data.model.LeaveStatus
+import com.example.data.model.UserAccount
+import com.example.data.model.UserRole
 import com.example.data.model.WorkShiftConfig
 import com.example.data.model.WorkSite
 import com.example.data.model.WorkerEntity
 import com.example.data.model.WorkerOverview
 import com.example.data.model.getWorkerDocumentAlerts
+import com.example.ui.components.DynamicAttendanceAnalyticsSection
 import com.example.ui.theme.BentoBlueContainer
 import com.example.ui.theme.BentoBluePrimary
 import com.example.ui.theme.BentoError
@@ -135,6 +138,7 @@ fun DashboardScreen(
   allLeaveRequests: List<LeaveRequest> = emptyList(),
   allLeaveBalances: List<LeaveBalance> = emptyList(),
   securityAlerts: List<DeviceSecurityAlert> = emptyList(),
+  users: List<UserAccount> = emptyList(),
   onAddNewSite: (name: String, lat: Double, lng: Double, radius: Int, address: String) -> Unit,
   onUpdateSite: (WorkSite) -> Unit,
   onDeleteSite: (String) -> Unit,
@@ -166,8 +170,49 @@ fun DashboardScreen(
     casualLeave: Double,
     sickLeave: Double,
   ) -> Unit,
+  onAddNewWorkerWithAccount: ((
+    fullName: String,
+    role: String,
+    siteId: String,
+    siteName: String,
+    nationalId: String,
+    phone: String,
+    deviceModel: String,
+    isApproved: Boolean,
+    assignedSiteIds: String,
+    assignedSiteNames: String,
+    iqamaNumber: String,
+    iqamaStartDate: String,
+    iqamaEndDate: String,
+    insuranceNumber: String,
+    insuranceProvider: String,
+    insuranceStartDate: String,
+    insuranceEndDate: String,
+    passportNumber: String,
+    nationality: String,
+    contractEndDate: String,
+    salary: Double,
+    hireDate: String,
+    employmentEndDate: String,
+    annualLeave: Double,
+    casualLeave: Double,
+    sickLeave: Double,
+    username: String,
+    password: String,
+    userRole: UserRole,
+    createAccount: Boolean,
+  ) -> Unit)? = null,
   onUpdateWorker: (WorkerEntity) -> Unit,
+  onUpdateWorkerWithAccount: ((
+    worker: WorkerEntity,
+    userAccount: UserAccount?,
+    newUsername: String?,
+    newPassword: String?,
+    newRole: UserRole?,
+    resetDevice: Boolean,
+  ) -> Unit)? = null,
   onDeleteWorker: (String) -> Unit,
+  onResetDeviceBinding: ((username: String) -> Unit)? = null,
   onUpdateLeaveBalance: (
     workerId: String,
     annualTotal: Double,
@@ -214,6 +259,7 @@ fun DashboardScreen(
       rawWorkers = rawWorkers,
       sites = sites,
       records = records,
+      users = users,
       shiftConfig = shiftConfig,
       mapTilerApiKey = mapTilerApiKey,
       deviceLatitude = deviceLatitude,
@@ -233,8 +279,11 @@ fun DashboardScreen(
       onUpdateSite = onUpdateSite,
       onDeleteSite = onDeleteSite,
       onAddNewWorker = onAddNewWorker,
+      onAddNewWorkerWithAccount = onAddNewWorkerWithAccount,
       onUpdateWorker = onUpdateWorker,
+      onUpdateWorkerWithAccount = onUpdateWorkerWithAccount,
       onDeleteWorker = onDeleteWorker,
+      onResetDeviceBinding = onResetDeviceBinding,
       onUpdateLeaveBalance = onUpdateLeaveBalance,
       onUpdateWorkerDocuments = onUpdateWorkerDocuments,
       onUpdateShiftConfig = onUpdateShiftConfig,
@@ -694,6 +743,17 @@ fun DashboardScreen(
           }
         }
       }
+
+      // ==========================================
+      // --- 5.5 DYNAMIC ATTENDANCE & ANALYTICS CHARTS ---
+      // ==========================================
+      DynamicAttendanceAnalyticsSection(
+        records = records,
+        workers = rawWorkers,
+        overviewWorkers = workers,
+        sites = sites,
+        shiftConfig = shiftConfig,
+      )
 
       // ==========================================
       // --- 6. LIVE WORKER ATTENDANCE ROSTER ---

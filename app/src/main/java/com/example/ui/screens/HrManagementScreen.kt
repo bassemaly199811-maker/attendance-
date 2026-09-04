@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -123,6 +124,8 @@ import com.example.data.model.DocumentExpiryStatus
 import com.example.data.model.DocumentType
 import com.example.data.model.LeaveBalance
 import com.example.data.model.LeaveRequest
+import com.example.data.model.UserAccount
+import com.example.data.model.UserRole
 import com.example.data.model.WorkShiftConfig
 import com.example.data.model.WorkSite
 import com.example.data.model.WorkerEntity
@@ -260,6 +263,7 @@ fun HrManagementScreen(
   initialOpenCard: String? = null,
   leaveRequests: List<LeaveRequest> = emptyList(),
   leaveBalances: List<LeaveBalance> = emptyList(),
+  users: List<UserAccount> = emptyList(),
   onBack: () -> Unit,
   onAddNewSite: (name: String, lat: Double, lng: Double, radius: Int, address: String) -> Unit,
   onUpdateSite: (WorkSite) -> Unit,
@@ -294,6 +298,47 @@ fun HrManagementScreen(
   ) -> Unit,
   onUpdateWorker: (WorkerEntity) -> Unit,
   onDeleteWorker: (String) -> Unit,
+  onAddNewWorkerWithAccount: ((
+    fullName: String,
+    role: String,
+    siteId: String,
+    siteName: String,
+    nationalId: String,
+    phone: String,
+    deviceModel: String,
+    isApproved: Boolean,
+    assignedSiteIds: String,
+    assignedSiteNames: String,
+    iqamaNumber: String,
+    iqamaStartDate: String,
+    iqamaEndDate: String,
+    insuranceNumber: String,
+    insuranceProvider: String,
+    insuranceStartDate: String,
+    insuranceEndDate: String,
+    passportNumber: String,
+    nationality: String,
+    contractEndDate: String,
+    salary: Double,
+    hireDate: String,
+    employmentEndDate: String,
+    annualLeaveTotal: Double,
+    casualLeaveTotal: Double,
+    sickLeaveTotal: Double,
+    username: String,
+    password: String,
+    userRole: UserRole,
+    createAccount: Boolean,
+  ) -> Unit)? = null,
+  onUpdateWorkerWithAccount: ((
+    worker: WorkerEntity,
+    userAccount: UserAccount?,
+    newUsername: String?,
+    newPassword: String?,
+    newRole: UserRole?,
+    resetDevice: Boolean,
+  ) -> Unit)? = null,
+  onResetDeviceBinding: ((username: String) -> Unit)? = null,
   onUpdateLeaveBalance: (
     workerId: String,
     annualTotal: Double,
@@ -325,8 +370,8 @@ fun HrManagementScreen(
   val scrollState = rememberScrollState()
 
   // Pop-up modal visibility states for each card
-  var showUsersInfoModal by remember { mutableStateOf(initialOpenCard == "USERS_INFO") }
-  var showWorkersModal by remember { mutableStateOf(initialOpenCard == "WORKERS") }
+  var showUsersInfoModal by remember { mutableStateOf(initialOpenCard == "USERS_INFO" || initialOpenCard == "WORKERS") }
+  var showWorkersModal by remember { mutableStateOf(false) }
   var showPaperManagementModal by remember { mutableStateOf(initialOpenCard == "PAPER" || initialSearchQuery.isNotBlank()) }
   var showSitesModal by remember { mutableStateOf(initialOpenCard == "SITES") }
   var showReportModal by remember { mutableStateOf(initialOpenCard == "REPORT") }
@@ -335,6 +380,7 @@ fun HrManagementScreen(
   // Sub-dialogs
   var showAddWorkerDialog by remember { mutableStateOf(false) }
   var workerToEdit by remember { mutableStateOf<WorkerEntity?>(null) }
+  var workerToEditWithAccount by remember { mutableStateOf<Pair<WorkerEntity, UserAccount?>?>(null) }
   var workerToDelete by remember { mutableStateOf<WorkerOverview?>(null) }
 
   var showAddSiteDialog by remember { mutableStateOf(false) }
@@ -503,30 +549,17 @@ fun HrManagementScreen(
     // --- 4. HR MANAGEMENT MODULAR BENTO CARDS ---
     // ==========================================
 
-    // CARD 0: Users Info & Comprehensive Employee Records
+    // CARD 0: Users Info & Workers Directory Management (Unified Hub)
     HrModularMenuCard(
-      title = "Users Info & Employee Profiles",
-      titleAr = "معلومات المستخدمين وسجلات الموظفين الشاملة",
-      description = "Search all employees, view profile details, inspect leave balance and request histories with messages, check attendance records with photos and times, and edit documents.",
+      title = "Users Info & Workers Directory",
+      titleAr = "معلومات المستخدمين ودليل الموظفين والحسابات",
+      description = "Search all employees, view profile details, inspect leave balances and request histories, check attendance records with photos and timestamps, create/edit staff details with user login accounts, and manage hardware bindings.",
       icon = Icons.Default.AccountBox,
       accentColor = Color(0xFF0288D1),
-      badgeText = "${rawWorkers.size} Employees",
-      actionText = "Open Users Info",
-      onActionClick = { showUsersInfoModal = true },
-      onCardClick = { showUsersInfoModal = true },
-    )
-
-    // CARD 1: Workers Directory & Management
-    HrModularMenuCard(
-      title = "Workers Directory & Management",
-      titleAr = "Staff profiles & biometric binding",
-      description = "Add new workers, update roles, assign work sites, and manage approved biometric devices.",
-      icon = Icons.Default.People,
-      accentColor = BentoBluePrimary,
-      badgeText = "${rawWorkers.size} Active",
-      actionText = "+ Add New Worker",
+      badgeText = "${rawWorkers.size} Staff & Users",
+      actionText = "+ Add Worker & User",
       onActionClick = { showAddWorkerDialog = true },
-      onCardClick = { showWorkersModal = true },
+      onCardClick = { showUsersInfoModal = true },
     )
 
     // CARD 2: Paper & Document Management
@@ -585,7 +618,7 @@ fun HrManagementScreen(
   }
 
   // ==========================================
-  // --- MODAL DIALOG 0: USERS INFO ---
+  // --- MODAL DIALOG 0: USERS INFO & WORKERS DIRECTORY ---
   // ==========================================
   if (showUsersInfoModal) {
     UsersInfoModalDialog(
@@ -593,28 +626,23 @@ fun HrManagementScreen(
       records = records,
       leaveRequests = leaveRequests,
       leaveBalances = leaveBalances,
+      users = users,
+      sites = sites,
       isOnline = isOnline,
       onDismiss = { showUsersInfoModal = false },
       onUpdateWorkerDocuments = onUpdateWorkerDocuments,
       onUpdateLeaveBalance = onUpdateLeaveBalance,
-    )
-  }
-
-  // ==========================================
-  // --- MODAL DIALOG 1: WORKERS DIRECTORY ---
-  // ==========================================
-  if (showWorkersModal) {
-    WorkersDirectoryModalDialog(
-      workers = rawWorkers,
-      overviewWorkers = workers,
-      sites = sites,
-      leaveBalances = leaveBalances,
-      onDismiss = { showWorkersModal = false },
-      onAddWorkerClick = { showAddWorkerDialog = true },
-      onEditWorkerClick = { workerToEdit = it },
-      onDeleteWorkerClick = { overview -> workerToDelete = overview },
-      onEditLeaveBalanceClick = { worker, balance ->
-        workerForLeaveBalanceEdit = Pair(worker, balance)
+      onAddWorkerWithAccountClick = {
+        showAddWorkerDialog = true
+      },
+      onEditWorkerWithAccountClick = { worker, user ->
+        workerToEditWithAccount = Pair(worker, user)
+      },
+      onDeleteWorkerClick = { worker ->
+        onDeleteWorker(worker.id)
+      },
+      onResetDeviceBinding = { username ->
+        onResetDeviceBinding?.invoke(username)
       },
     )
   }
@@ -672,15 +700,82 @@ fun HrManagementScreen(
   }
 
   // ==========================================
-  // --- SUB-DIALOG: ADD WORKER FORM ---
+  // --- SUB-DIALOG: ADD WORKER & USER FORM ---
   // ==========================================
   if (showAddWorkerDialog) {
     WorkerFormDialog(
-      title = "Register New Field Worker",
+      title = "Register New Field Worker & User",
       sites = sites,
       initialWorker = null,
+      initialUser = null,
       initialLeaveBalance = null,
       onDismiss = { showAddWorkerDialog = false },
+      onConfirmWithAccount = { name, role, siteId, siteName, nationalId, phone, device, isApproved, assignedIds, assignedNames, iqamaNum, iqamaStart, iqamaEnd, insNum, insProvider, insStart, insEnd, passport, nationality, contractEnd, salary, hireDate, employmentEndDate, annualLeave, casualLeave, sickLeave, username, password, userRole, createAccount, _ ->
+        if (onAddNewWorkerWithAccount != null) {
+          onAddNewWorkerWithAccount(
+            name,
+            role,
+            siteId,
+            siteName,
+            nationalId,
+            phone,
+            device,
+            isApproved,
+            assignedIds,
+            assignedNames,
+            iqamaNum,
+            iqamaStart,
+            iqamaEnd,
+            insNum,
+            insProvider,
+            insStart,
+            insEnd,
+            passport,
+            nationality,
+            contractEnd,
+            salary,
+            hireDate,
+            employmentEndDate,
+            annualLeave,
+            casualLeave,
+            sickLeave,
+            username,
+            password,
+            userRole,
+            createAccount,
+          )
+        } else {
+          onAddNewWorker(
+            name,
+            role,
+            siteId,
+            siteName,
+            nationalId,
+            phone,
+            device,
+            isApproved,
+            assignedIds,
+            assignedNames,
+            iqamaNum,
+            iqamaStart,
+            iqamaEnd,
+            insNum,
+            insProvider,
+            insStart,
+            insEnd,
+            passport,
+            nationality,
+            contractEnd,
+            salary,
+            hireDate,
+            employmentEndDate,
+            annualLeave,
+            casualLeave,
+            sickLeave,
+          )
+        }
+        showAddWorkerDialog = false
+      },
       onConfirm = { name, role, siteId, siteName, nationalId, phone, device, isApproved, assignedIds, assignedNames, iqamaNum, iqamaStart, iqamaEnd, insNum, insProvider, insStart, insEnd, passport, nationality, contractEnd, salary, hireDate, employmentEndDate, annualLeave, casualLeave, sickLeave ->
         onAddNewWorker(
           name,
@@ -716,14 +811,116 @@ fun HrManagementScreen(
   }
 
   // ==========================================
-  // --- SUB-DIALOG: EDIT WORKER FORM ---
+  // --- SUB-DIALOG: EDIT WORKER & USER FORM ---
   // ==========================================
+  workerToEditWithAccount?.let { (worker, user) ->
+    val currentWorkerLeave = leaveBalances.find { it.workerId == worker.id } ?: LeaveBalance(workerId = worker.id)
+    WorkerFormDialog(
+      title = "Edit Worker & Account Details",
+      sites = sites,
+      initialWorker = worker,
+      initialUser = user,
+      initialLeaveBalance = currentWorkerLeave,
+      onDismiss = { workerToEditWithAccount = null },
+      onConfirmWithAccount = { name, role, siteId, siteName, nationalId, phone, device, isApproved, assignedIds, assignedNames, iqamaNum, iqamaStart, iqamaEnd, insNum, insProvider, insStart, insEnd, passport, nationality, contractEnd, salary, hireDate, employmentEndDate, annualLeave, casualLeave, sickLeave, username, password, userRole, createAccount, resetDevice ->
+        val updatedWorker = worker.copy(
+          fullName = name,
+          role = role,
+          siteId = siteId,
+          siteName = siteName,
+          nationalId = nationalId,
+          phoneNumber = phone,
+          deviceModel = device,
+          isDeviceApproved = isApproved,
+          assignedSiteIds = assignedIds,
+          assignedSiteNames = assignedNames,
+          iqamaNumber = iqamaNum,
+          iqamaStartDate = iqamaStart,
+          iqamaEndDate = iqamaEnd,
+          insuranceNumber = insNum,
+          insuranceProvider = insProvider,
+          insuranceStartDate = insStart,
+          insuranceEndDate = insEnd,
+          passportNumber = passport,
+          nationality = nationality,
+          contractEndDate = contractEnd,
+          salary = salary,
+          hireDate = hireDate,
+          employmentEndDate = employmentEndDate,
+        )
+        if (onUpdateWorkerWithAccount != null) {
+          onUpdateWorkerWithAccount(
+            updatedWorker,
+            user,
+            if (createAccount) username else null,
+            if (createAccount) password else null,
+            if (createAccount) userRole else null,
+            resetDevice,
+          )
+        } else {
+          onUpdateWorker(updatedWorker)
+        }
+        onUpdateLeaveBalance(
+          worker.id,
+          annualLeave,
+          casualLeave,
+          sickLeave,
+          null,
+          null,
+          null,
+        )
+        workerToEditWithAccount = null
+      },
+      onConfirm = { name, role, siteId, siteName, nationalId, phone, device, isApproved, assignedIds, assignedNames, iqamaNum, iqamaStart, iqamaEnd, insNum, insProvider, insStart, insEnd, passport, nationality, contractEnd, salary, hireDate, employmentEndDate, annualLeave, casualLeave, sickLeave ->
+        onUpdateWorker(
+          worker.copy(
+            fullName = name,
+            role = role,
+            siteId = siteId,
+            siteName = siteName,
+            nationalId = nationalId,
+            phoneNumber = phone,
+            deviceModel = device,
+            isDeviceApproved = isApproved,
+            assignedSiteIds = assignedIds,
+            assignedSiteNames = assignedNames,
+            iqamaNumber = iqamaNum,
+            iqamaStartDate = iqamaStart,
+            iqamaEndDate = iqamaEnd,
+            insuranceNumber = insNum,
+            insuranceProvider = insProvider,
+            insuranceStartDate = insStart,
+            insuranceEndDate = insEnd,
+            passportNumber = passport,
+            nationality = nationality,
+            contractEndDate = contractEnd,
+            salary = salary,
+            hireDate = hireDate,
+            employmentEndDate = employmentEndDate,
+          )
+        )
+        onUpdateLeaveBalance(
+          worker.id,
+          annualLeave,
+          casualLeave,
+          sickLeave,
+          null,
+          null,
+          null,
+        )
+        workerToEditWithAccount = null
+      },
+    )
+  }
+
+  // Legacy edit fallback
   workerToEdit?.let { worker ->
     val currentWorkerLeave = leaveBalances.find { it.workerId == worker.id } ?: LeaveBalance(workerId = worker.id)
     WorkerFormDialog(
       title = "Edit Worker Details",
       sites = sites,
       initialWorker = worker,
+      initialUser = users.find { it.workerId == worker.id },
       initialLeaveBalance = currentWorkerLeave,
       onDismiss = { workerToEdit = null },
       onConfirm = { name, role, siteId, siteName, nationalId, phone, device, isApproved, assignedIds, assignedNames, iqamaNum, iqamaStart, iqamaEnd, insNum, insProvider, insStart, insEnd, passport, nationality, contractEnd, salary, hireDate, employmentEndDate, annualLeave, casualLeave, sickLeave ->
@@ -2266,10 +2463,12 @@ fun AttendanceReportModalDialog(
     exportErrorMessage = null
     isExportingCsv = true
     val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date())
+    val deptMap = workers.associate { w: WorkerEntity -> w.fullName to w.role }
+    val periodLabel = if (selectedWorkerName == "ALL") "All Employees Attendance Report" else "Attendance Report: $selectedWorkerName"
     coroutineScope.launch {
       try {
         val uri = withContext(Dispatchers.IO) {
-          exportAttendanceToCsv(context, filtered)
+          exportAttendanceToCsv(context, filtered, periodLabel = periodLabel, workerDepartmentMap = deptMap)
         }
         isExportingCsv = false
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -2994,8 +3193,42 @@ fun WorkerFormDialog(
   title: String,
   sites: List<WorkSite>,
   initialWorker: WorkerEntity? = null,
+  initialUser: UserAccount? = null,
   initialLeaveBalance: LeaveBalance? = null,
   onDismiss: () -> Unit,
+  onConfirmWithAccount: ((
+    fullName: String,
+    role: String,
+    siteId: String,
+    siteName: String,
+    nationalId: String,
+    phone: String,
+    deviceModel: String,
+    isApproved: Boolean,
+    assignedSiteIds: String,
+    assignedSiteNames: String,
+    iqamaNumber: String,
+    iqamaStartDate: String,
+    iqamaEndDate: String,
+    insuranceNumber: String,
+    insuranceProvider: String,
+    insuranceStartDate: String,
+    insuranceEndDate: String,
+    passportNumber: String,
+    nationality: String,
+    contractEndDate: String,
+    salary: Double,
+    hireDate: String,
+    employmentEndDate: String,
+    annualLeaveTotal: Double,
+    casualLeaveTotal: Double,
+    sickLeaveTotal: Double,
+    username: String,
+    password: String,
+    userRole: UserRole,
+    createAccount: Boolean,
+    resetDevice: Boolean,
+  ) -> Unit)? = null,
   onConfirm: (
     fullName: String,
     role: String,
@@ -3031,6 +3264,13 @@ fun WorkerFormDialog(
   var phone by remember { mutableStateOf(initialWorker?.phoneNumber ?: "") }
   var deviceModel by remember { mutableStateOf(initialWorker?.deviceModel ?: "Samsung Galaxy A54 5G") }
   var isApproved by remember { mutableStateOf(initialWorker?.isDeviceApproved ?: true) }
+
+  // Account credentials state (Unified Worker + User)
+  var createOrLinkAccount by remember { mutableStateOf(initialUser != null || initialWorker == null) }
+  var accountUsername by remember { mutableStateOf(initialUser?.username ?: "") }
+  var accountPassword by remember { mutableStateOf(initialUser?.passwordHash ?: "123456") }
+  var accountRole by remember { mutableStateOf(initialUser?.role ?: UserRole.WORKER) }
+  var resetDeviceBinding by remember { mutableStateOf(false) }
 
   // Document fields
   var iqamaNumber by remember { mutableStateOf(initialWorker?.iqamaNumber ?: "") }
@@ -3087,106 +3327,116 @@ fun WorkerFormDialog(
   var selectedSiteIds by remember { mutableStateOf(initialSiteIds.toSet()) }
   var formValidationError by remember { mutableStateOf<String?>(null) }
 
-  AlertDialog(
+  Dialog(
     onDismissRequest = onDismiss,
-    properties = DialogProperties(dismissOnClickOutside = true, dismissOnBackPress = true),
-    containerColor = Color.White,
-    title = {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-          modifier = Modifier.size(36.dp).clip(CircleShape).background(BentoBlueContainer),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(Icons.Default.PersonAdd, contentDescription = null, tint = BentoBluePrimary, modifier = Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
-      }
-    },
-    text = {
+    properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = true, dismissOnBackPress = true),
+  ) {
+    Card(
+      modifier = Modifier
+        .fillMaxWidth(0.95f)
+        .fillMaxHeight(0.90f),
+      shape = RoundedCornerShape(20.dp),
+      colors = CardDefaults.cardColors(containerColor = Color.White),
+      border = BorderStroke(1.dp, BentoOutline),
+    ) {
       Column(
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize()
       ) {
-        if (formValidationError != null) {
+        // Dialog Title Bar
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Box(
+              modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(BentoBlueContainer),
+              contentAlignment = Alignment.Center,
+            ) {
+              Icon(
+                Icons.Default.PersonAdd,
+                contentDescription = null,
+                tint = BentoBluePrimary,
+                modifier = Modifier.size(18.dp),
+              )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+              text = title,
+              fontWeight = FontWeight.Bold,
+              fontSize = 15.5.sp,
+              color = Color.Black,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+          IconButton(
+            onClick = onDismiss,
+            modifier = Modifier.size(28.dp),
+          ) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.DarkGray, modifier = Modifier.size(20.dp))
+          }
+        }
+
+        HorizontalDivider(color = BentoOutline, thickness = 0.8.dp)
+
+        // Scrollable Form Content
+        Column(
+          modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          if (formValidationError != null) {
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = Color(0xFFFFEBEE),
+              border = BorderStroke(1.dp, BentoError.copy(alpha = 0.5f)),
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Row(
+                modifier = Modifier.padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = BentoError, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = formValidationError ?: "",
+                  color = BentoError,
+                  fontSize = 11.5.sp,
+                  fontWeight = FontWeight.SemiBold,
+                )
+              }
+            }
+          }
+
+          // 1. Basic Info Section
           Surface(
             shape = RoundedCornerShape(10.dp),
-            color = Color(0xFFFFEBEE),
-            border = BorderStroke(1.dp, BentoError.copy(alpha = 0.5f)),
+            color = Color(0xFFFAFAFA),
+            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
             modifier = Modifier.fillMaxWidth(),
           ) {
-            Row(
-              modifier = Modifier.padding(10.dp),
-              verticalAlignment = Alignment.CenterVertically,
-            ) {
-              Icon(Icons.Default.Warning, contentDescription = null, tint = BentoError, modifier = Modifier.size(18.dp))
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = formValidationError ?: "",
-                color = BentoError,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-              )
-            }
-          }
-        }
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Text("Personal & Role Info", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
 
-        // 1. Basic Info Section
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = Color(0xFFFAFAFA),
-          border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Personal & Professional Information", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-            
-            OutlinedTextField(
-              value = fullName,
-              onValueChange = {
-                fullName = it
-                formValidationError = null
-              },
-              label = { Text("Worker Full Name *", fontSize = 11.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-              textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedLabelColor = Color.Black,
-                unfocusedLabelColor = Color.Black,
-                focusedBorderColor = BentoBluePrimary,
-                unfocusedBorderColor = Color(0xFFCCCCCC),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-              ),
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth(),
-            )
-
-            OutlinedTextField(
-              value = role,
-              onValueChange = { role = it },
-              label = { Text("Job Title / Role *", fontSize = 11.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-              textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedLabelColor = Color.Black,
-                unfocusedLabelColor = Color.Black,
-                focusedBorderColor = BentoBluePrimary,
-                unfocusedBorderColor = Color(0xFFCCCCCC),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-              ),
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth(),
-            )
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               OutlinedTextField(
-                value = nationalId,
-                onValueChange = { nationalId = it },
-                label = { Text("National ID / Iqama", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                value = fullName,
+                onValueChange = {
+                  fullName = it
+                  formValidationError = null
+                },
+                label = { Text("Worker Full Name *", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
                 textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
                 colors = OutlinedTextFieldDefaults.colors(
                   focusedTextColor = Color.Black,
@@ -3199,12 +3449,13 @@ fun WorkerFormDialog(
                   unfocusedContainerColor = Color.White,
                 ),
                 singleLine = true,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
               )
+
               OutlinedTextField(
-                value = phone,
-                onValueChange = { phone = it },
-                label = { Text("Phone Number", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                value = role,
+                onValueChange = { role = it },
+                label = { Text("Job Title / Role *", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
                 textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
                 colors = OutlinedTextFieldDefaults.colors(
                   focusedTextColor = Color.Black,
@@ -3217,562 +3468,785 @@ fun WorkerFormDialog(
                   unfocusedContainerColor = Color.White,
                 ),
                 singleLine = true,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
+              )
+
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                  value = nationalId,
+                  onValueChange = { nationalId = it },
+                  label = { Text("National ID", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                  value = phone,
+                  onValueChange = { phone = it },
+                  label = { Text("Phone Number", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+              }
+            }
+          }
+
+          // 2. Assigned Sites Checkboxes
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFFFAFAFA),
+            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              Text("Assigned Work Sites:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+              sites.forEach { site ->
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable {
+                      selectedSiteIds = if (selectedSiteIds.contains(site.id)) {
+                        if (selectedSiteIds.size > 1) selectedSiteIds - site.id else selectedSiteIds
+                      } else {
+                        selectedSiteIds + site.id
+                      }
+                    }
+                    .padding(vertical = 1.dp),
+                ) {
+                  Checkbox(
+                    checked = selectedSiteIds.contains(site.id),
+                    onCheckedChange = { checked ->
+                      selectedSiteIds = if (checked) {
+                        selectedSiteIds + site.id
+                      } else {
+                        if (selectedSiteIds.size > 1) selectedSiteIds - site.id else selectedSiteIds
+                      }
+                    },
+                    colors = CheckboxDefaults.colors(checkedColor = BentoBluePrimary),
+                  )
+                  Text(text = site.name, fontSize = 11.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold)
+                }
+              }
+            }
+          }
+
+          // 3. Separate Iqama / Residency Details Card
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFFF0F7FF),
+            border = BorderStroke(1.dp, BentoBluePrimary.copy(alpha = 0.3f)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Assignment, contentDescription = null, tint = BentoBluePrimary, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Iqama & Residency Details", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+              }
+
+              OutlinedTextField(
+                value = iqamaNumber,
+                onValueChange = { iqamaNumber = it },
+                label = { Text("Iqama Number", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                  focusedTextColor = Color.Black,
+                  unfocusedTextColor = Color.Black,
+                  focusedLabelColor = Color.Black,
+                  unfocusedLabelColor = Color.Black,
+                  focusedBorderColor = BentoBluePrimary,
+                  unfocusedBorderColor = Color(0xFFCCCCCC),
+                  focusedContainerColor = Color.White,
+                  unfocusedContainerColor = Color.White,
+                ),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+              )
+
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                  value = iqamaStartDate,
+                  onValueChange = { iqamaStartDate = it },
+                  label = { Text("Issue Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("2025-09-01", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                  value = iqamaEndDate,
+                  onValueChange = { iqamaEndDate = it },
+                  label = { Text("Expiry Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("2026-09-01", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+              }
+            }
+          }
+
+          // 4. Medical Insurance Details Card
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFFF0FFF4),
+            border = BorderStroke(1.dp, BentoSuccess.copy(alpha = 0.3f)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.HealthAndSafety, contentDescription = null, tint = BentoSuccess, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Medical Insurance Details", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+              }
+
+              OutlinedTextField(
+                value = insuranceProvider,
+                onValueChange = { insuranceProvider = it },
+                label = { Text("Insurance Provider", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                placeholder = { Text("Bupa / Tawuniya", fontSize = 9.5.sp, color = Color.DarkGray) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                  focusedTextColor = Color.Black,
+                  unfocusedTextColor = Color.Black,
+                  focusedLabelColor = Color.Black,
+                  unfocusedLabelColor = Color.Black,
+                  focusedBorderColor = BentoBluePrimary,
+                  unfocusedBorderColor = Color(0xFFCCCCCC),
+                  focusedContainerColor = Color.White,
+                  unfocusedContainerColor = Color.White,
+                ),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+              )
+
+              OutlinedTextField(
+                value = insuranceNumber,
+                onValueChange = { insuranceNumber = it },
+                label = { Text("Policy Number", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                  focusedTextColor = Color.Black,
+                  unfocusedTextColor = Color.Black,
+                  focusedLabelColor = Color.Black,
+                  unfocusedLabelColor = Color.Black,
+                  focusedBorderColor = BentoBluePrimary,
+                  unfocusedBorderColor = Color(0xFFCCCCCC),
+                  focusedContainerColor = Color.White,
+                  unfocusedContainerColor = Color.White,
+                ),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+              )
+
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                  value = insuranceStartDate,
+                  onValueChange = { insuranceStartDate = it },
+                  label = { Text("Start Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("2025-10-01", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                  value = insuranceEndDate,
+                  onValueChange = { insuranceEndDate = it },
+                  label = { Text("Expiry Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("2026-10-01", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+              }
+            }
+          }
+
+          // 5. Passport & Work Contract
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFFFBF5FF),
+            border = BorderStroke(1.dp, Color(0xFF9C27B0).copy(alpha = 0.3f)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Description, contentDescription = null, tint = Color(0xFF9C27B0), modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Passport & Work Contract", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+              }
+
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                  value = passportNumber,
+                  onValueChange = { passportNumber = it },
+                  label = { Text("Passport Number", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                  value = nationality,
+                  onValueChange = { nationality = it },
+                  label = { Text("Nationality", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+              }
+
+              OutlinedTextField(
+                value = contractEndDate,
+                onValueChange = { contractEndDate = it },
+                label = { Text("Contract End Date", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                  focusedTextColor = Color.Black,
+                  unfocusedTextColor = Color.Black,
+                  focusedLabelColor = Color.Black,
+                  unfocusedLabelColor = Color.Black,
+                  focusedBorderColor = BentoBluePrimary,
+                  unfocusedBorderColor = Color(0xFFCCCCCC),
+                  focusedContainerColor = Color.White,
+                  unfocusedContainerColor = Color.White,
+                ),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
               )
             }
           }
-        }
 
-        // 2. Assigned Sites Checkboxes
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = Color(0xFFFAFAFA),
-          border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Assigned Work Sites:", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-            sites.forEach { site ->
+          // 6. Salary & Employment Tenure
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFFFFFDF5),
+            border = BorderStroke(1.dp, BentoWarning.copy(alpha = 0.35f)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Info, contentDescription = null, tint = BentoWarning, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Salary & Employment Dates", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+              }
+
+              OutlinedTextField(
+                value = salaryStr,
+                onValueChange = { salaryStr = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                label = { Text("Monthly Base Salary (SAR)", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                placeholder = { Text("e.g. 5000", fontSize = 9.5.sp, color = Color.DarkGray) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                  focusedTextColor = Color.Black,
+                  unfocusedTextColor = Color.Black,
+                  focusedLabelColor = Color.Black,
+                  unfocusedLabelColor = Color.Black,
+                  focusedBorderColor = BentoBluePrimary,
+                  unfocusedBorderColor = Color(0xFFCCCCCC),
+                  focusedContainerColor = Color.White,
+                  unfocusedContainerColor = Color.White,
+                ),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+              )
+
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                  value = hireDate,
+                  onValueChange = { hireDate = it },
+                  label = { Text("Hire Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("2024-01-01", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                  value = employmentEndDate,
+                  onValueChange = { employmentEndDate = it },
+                  label = { Text("Employment End", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("Optional", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+              }
+            }
+          }
+
+          // 7. Leave Quota Days Card
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFFF0FDF4),
+            border = BorderStroke(1.dp, BentoSuccess.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.DateRange, contentDescription = null, tint = BentoSuccess, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Leave Balance Quotas (Days)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+              }
+
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                  value = annualLeavesStr,
+                  onValueChange = { annualLeavesStr = it.filter { ch -> ch.isDigit() } },
+                  label = { Text("Annual", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("21", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                  value = casualLeavesStr,
+                  onValueChange = { casualLeavesStr = it.filter { ch -> ch.isDigit() } },
+                  label = { Text("Casual", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("7", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                  value = sickLeavesStr,
+                  onValueChange = { sickLeavesStr = it.filter { ch -> ch.isDigit() } },
+                  label = { Text("Sick", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text("14", fontSize = 9.5.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = BentoBluePrimary,
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.weight(1f),
+                )
+              }
+            }
+          }
+
+          // 8. Device Model Binding
+          OutlinedTextField(
+            value = deviceModel,
+            onValueChange = { deviceModel = it },
+            label = { Text("Approved Device Model", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+            textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+            colors = OutlinedTextFieldDefaults.colors(
+              focusedTextColor = Color.Black,
+              unfocusedTextColor = Color.Black,
+              focusedLabelColor = Color.Black,
+              unfocusedLabelColor = Color.Black,
+              focusedBorderColor = BentoBluePrimary,
+              unfocusedBorderColor = Color(0xFFCCCCCC),
+              focusedContainerColor = Color.White,
+              unfocusedContainerColor = Color.White,
+            ),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+          )
+
+          // 9. User Account & Login Credentials Section
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFFF3E5F5),
+            border = BorderStroke(1.dp, Color(0xFFAB47BC).copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
               Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .clip(RoundedCornerShape(8.dp))
-                  .clickable {
-                    selectedSiteIds = if (selectedSiteIds.contains(site.id)) {
-                      if (selectedSiteIds.size > 1) selectedSiteIds - site.id else selectedSiteIds
-                    } else {
-                      selectedSiteIds + site.id
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(Icons.Default.AccountBox, contentDescription = null, tint = Color(0xFF8E24AA), modifier = Modifier.size(18.dp))
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text(
+                    "App Login Account",
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4A148C),
+                  )
+                }
+                Switch(
+                  checked = createOrLinkAccount,
+                  onCheckedChange = { createOrLinkAccount = it },
+                  colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color(0xFF8E24AA),
+                    checkedTrackColor = Color(0xFFE1BEE7),
+                  ),
+                )
+              }
+
+              if (createOrLinkAccount) {
+                HorizontalDivider(color = Color(0xFFAB47BC).copy(alpha = 0.2f))
+
+                OutlinedTextField(
+                  value = accountUsername,
+                  onValueChange = { accountUsername = it },
+                  label = { Text("Username *", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  placeholder = { Text(if (fullName.isNotBlank()) fullName.lowercase().replace(" ", "_").take(15) else "username", fontSize = 10.sp, color = Color.DarkGray) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = Color(0xFF8E24AA),
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                  value = accountPassword,
+                  onValueChange = { accountPassword = it },
+                  label = { Text("Password *", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
+                  colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+                    focusedBorderColor = Color(0xFF8E24AA),
+                    unfocusedBorderColor = Color(0xFFCCCCCC),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                  ),
+                  singleLine = true,
+                  modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                  Text("Role:", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                  FilterChip(
+                    selected = accountRole == UserRole.WORKER,
+                    onClick = { accountRole = UserRole.WORKER },
+                    label = { Text("Worker", fontSize = 11.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                      selectedContainerColor = BentoBlueContainer,
+                      selectedLabelColor = BentoBluePrimary,
+                    ),
+                  )
+                  FilterChip(
+                    selected = accountRole == UserRole.ADMIN,
+                    onClick = { accountRole = UserRole.ADMIN },
+                    label = { Text("Admin", fontSize = 11.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                      selectedContainerColor = Color(0xFFFFEBEE),
+                      selectedLabelColor = BentoError,
+                    ),
+                  )
+                }
+
+                if (initialUser != null && initialUser.boundDeviceId.isNotBlank()) {
+                  Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                    modifier = Modifier.fillMaxWidth(),
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(6.dp).fillMaxWidth(),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                      Column(modifier = Modifier.weight(1f)) {
+                        Text("Device Lock:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        Text(
+                          if (resetDeviceBinding) "Will reset lock on save" else "Bound: ${initialUser.boundDeviceModel.ifBlank { "Registered Phone" }}",
+                          fontSize = 9.5.sp,
+                          color = if (resetDeviceBinding) BentoError else Color.DarkGray,
+                        )
+                      }
+                      TextButton(
+                        onClick = { resetDeviceBinding = !resetDeviceBinding },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                      ) {
+                        Text(
+                          if (resetDeviceBinding) "Keep Lock" else "Reset Lock",
+                          fontSize = 10.5.sp,
+                          color = if (resetDeviceBinding) Color.DarkGray else BentoError,
+                          fontWeight = FontWeight.Bold,
+                        )
+                      }
                     }
                   }
-                  .padding(vertical = 2.dp),
-              ) {
-                Checkbox(
-                  checked = selectedSiteIds.contains(site.id),
-                  onCheckedChange = { checked ->
-                    selectedSiteIds = if (checked) {
-                      selectedSiteIds + site.id
-                    } else {
-                      if (selectedSiteIds.size > 1) selectedSiteIds - site.id else selectedSiteIds
-                    }
-                  },
-                  colors = CheckboxDefaults.colors(checkedColor = BentoBluePrimary),
-                )
-                Text(text = site.name, fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.SemiBold)
+                }
               }
             }
           }
         }
 
-        // 3. Separate Iqama / Residency Details Card (Light Blue Container)
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = Color(0xFFF0F7FF),
-          border = BorderStroke(1.dp, BentoBluePrimary.copy(alpha = 0.35f)),
-          modifier = Modifier.fillMaxWidth(),
+        HorizontalDivider(color = BentoOutline, thickness = 0.8.dp)
+
+        // Bottom Action Buttons - Compact Row with tight spacing
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          verticalAlignment = Alignment.CenterVertically,
         ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.Assignment, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Iqama & National Residency Details", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-            }
-
-            OutlinedTextField(
-              value = iqamaNumber,
-              onValueChange = { iqamaNumber = it },
-              label = { Text("Iqama Number", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-              textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedLabelColor = Color.Black,
-                unfocusedLabelColor = Color.Black,
-                focusedBorderColor = BentoBluePrimary,
-                unfocusedBorderColor = Color(0xFFCCCCCC),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-              ),
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth(),
-            )
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedTextField(
-                value = iqamaStartDate,
-                onValueChange = { iqamaStartDate = it },
-                label = { Text("Iqama Issue Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2025-09-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-              OutlinedTextField(
-                value = iqamaEndDate,
-                onValueChange = { iqamaEndDate = it },
-                label = { Text("Iqama Expiry Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2026-09-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-            }
+          OutlinedButton(
+            onClick = onDismiss,
+            modifier = Modifier
+              .weight(1f)
+              .height(42.dp),
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, Color(0xFFCCCCCC)),
+          ) {
+            Text("Cancel", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium)
           }
-        }
 
-        // 4. Separate Medical Insurance Details Card (Light Green Container)
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = Color(0xFFF0FFF4),
-          border = BorderStroke(1.dp, BentoSuccess.copy(alpha = 0.35f)),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.HealthAndSafety, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Medical Insurance Details", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-            }
+          Button(
+            onClick = {
+              if (fullName.isNotBlank()) {
+                val selectedSites = sites.filter { selectedSiteIds.contains(it.id) }
+                val assignedIdsStr = if (selectedSites.isNotEmpty()) selectedSites.joinToString(",") { it.id } else sites.firstOrNull()?.id ?: ""
+                val assignedNamesStr = if (selectedSites.isNotEmpty()) selectedSites.joinToString(", ") { it.name } else sites.firstOrNull()?.name ?: ""
+                val primarySite = selectedSites.firstOrNull() ?: sites.firstOrNull()
+                val primId = primarySite?.id ?: ""
+                val primName = primarySite?.name ?: ""
 
-            OutlinedTextField(
-              value = insuranceProvider,
-              onValueChange = { insuranceProvider = it },
-              label = { Text("Insurance Company", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-              placeholder = { Text("Bupa / Tawuniya / Medgulf", fontSize = 10.sp, color = Color.DarkGray) },
-              textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedLabelColor = Color.Black,
-                unfocusedLabelColor = Color.Black,
-                focusedBorderColor = BentoBluePrimary,
-                unfocusedBorderColor = Color(0xFFCCCCCC),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-              ),
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth(),
-            )
+                val generatedNationalId = nationalId.ifBlank { "10" + (10000000..99999999).random() }.trim()
+                val finalIqamaNum = iqamaNumber.ifBlank { generatedNationalId }.trim()
+                val finalIqamaStart = iqamaStartDate.ifBlank { "2025-09-01" }.trim()
+                val finalIqamaEnd = iqamaEndDate.ifBlank { "2026-09-01" }.trim()
 
-            OutlinedTextField(
-              value = insuranceNumber,
-              onValueChange = { insuranceNumber = it },
-              label = { Text("Policy / Insurance Number", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-              textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedLabelColor = Color.Black,
-                unfocusedLabelColor = Color.Black,
-                focusedBorderColor = BentoBluePrimary,
-                unfocusedBorderColor = Color(0xFFCCCCCC),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-              ),
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth(),
-            )
+                val finalInsNumber = insuranceNumber.ifBlank { "POL-" + (100000..999999).random() + "-BUPA" }.trim()
+                val finalInsProvider = insuranceProvider.ifBlank { "Bupa Arabia Insurance" }.trim()
+                val finalInsStart = insuranceStartDate.ifBlank { "2025-10-01" }.trim()
+                val finalInsEnd = insuranceEndDate.ifBlank { "2026-10-01" }.trim()
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedTextField(
-                value = insuranceStartDate,
-                onValueChange = { insuranceStartDate = it },
-                label = { Text("Insurance Start Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2025-10-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-              OutlinedTextField(
-                value = insuranceEndDate,
-                onValueChange = { insuranceEndDate = it },
-                label = { Text("Insurance Expiry Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2026-10-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-            }
-          }
-        }
+                val finalPassport = passportNumber.ifBlank { "P" + (10000000..99999999).random() }.trim()
+                val finalNationality = nationality.ifBlank { "Saudi" }.trim()
+                val finalContractEnd = contractEndDate.ifBlank { "2027-09-01" }.trim()
+                val finalPhone = phone.ifBlank { "+966 5" + (10000000..99999999).random() }.trim()
+                val finalRole = role.ifBlank { "Field Technician" }.trim()
+                val finalDeviceModel = deviceModel.ifBlank { "Samsung Galaxy A54 5G" }.trim()
+                val finalSalary = salaryStr.toDoubleOrNull() ?: 0.0
+                val finalHireDate = hireDate.ifBlank { "2024-01-01" }.trim()
+                val finalAnnualLeaves = annualLeavesStr.toDoubleOrNull() ?: 21.0
+                val finalCasualLeaves = casualLeavesStr.toDoubleOrNull() ?: 7.0
+                val finalSickLeaves = sickLeavesStr.toDoubleOrNull() ?: 14.0
 
-        // 5. Passport, Nationality & Contract End Date (Light Purple Container)
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = Color(0xFFFBF5FF),
-          border = BorderStroke(1.dp, Color(0xFF9C27B0).copy(alpha = 0.35f)),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.Description, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Passport & Work Contract", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-            }
+                val effectiveUsername = accountUsername.ifBlank {
+                  val sanitized = fullName.trim().lowercase().replace(Regex("[^a-z0-9]"), "_").take(12)
+                  if (sanitized.isNotBlank()) sanitized else "user_" + (1000..9999).random()
+                }.trim()
+                val effectivePassword = accountPassword.ifBlank { "123456" }.trim()
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedTextField(
-                value = passportNumber,
-                onValueChange = { passportNumber = it },
-                label = { Text("Passport Number", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-              OutlinedTextField(
-                value = nationality,
-                onValueChange = { nationality = it },
-                label = { Text("Nationality", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-            }
-
-            OutlinedTextField(
-              value = contractEndDate,
-              onValueChange = { contractEndDate = it },
-              label = { Text("Contract End Date", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-              textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedLabelColor = Color.Black,
-                unfocusedLabelColor = Color.Black,
-                focusedBorderColor = BentoBluePrimary,
-                unfocusedBorderColor = Color(0xFFCCCCCC),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-              ),
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth(),
-            )
-          }
-        }
-
-        // 6. Salary & Employment Tenure (Light Amber Container)
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = Color(0xFFFFFDF5),
-          border = BorderStroke(1.dp, BentoWarning.copy(alpha = 0.35f)),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.Info, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Compensation & Employment Tenure", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-            }
-
-            OutlinedTextField(
-              value = salaryStr,
-              onValueChange = { salaryStr = it.filter { ch -> ch.isDigit() || ch == '.' } },
-              label = { Text("Monthly Base Salary (SAR / QAR)", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-              placeholder = { Text("e.g. 5000", fontSize = 10.sp, color = Color.DarkGray) },
-              textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedLabelColor = Color.Black,
-                unfocusedLabelColor = Color.Black,
-                focusedBorderColor = BentoBluePrimary,
-                unfocusedBorderColor = Color(0xFFCCCCCC),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-              ),
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth(),
-            )
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedTextField(
-                value = hireDate,
-                onValueChange = { hireDate = it },
-                label = { Text("Hire Date", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2024-01-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-              OutlinedTextField(
-                value = employmentEndDate,
-                onValueChange = { employmentEndDate = it },
-                label = { Text("Employment End", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("Optional", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-            }
-          }
-        }
-
-        // 5. Leave Quota & Available Days Card (Soft Mint/Teal Container)
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = Color(0xFFF0FDF4),
-          border = BorderStroke(1.dp, BentoSuccess.copy(alpha = 0.45f)),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.DateRange, contentDescription = null, tint = BentoSuccess, modifier = Modifier.size(18.dp))
-              Spacer(modifier = Modifier.width(6.dp))
-              Column {
-                Text(
-                  "Leave Days Quota / رصيد الإجازات المتاحة",
-                  fontSize = 12.5.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = Color.Black,
-                )
-                Text(
-                  "Set yearly available leave days for this worker",
-                  fontSize = 10.sp,
-                  color = BentoTextSecondary,
-                )
+                if (onConfirmWithAccount != null) {
+                  onConfirmWithAccount(
+                    fullName.trim(),
+                    finalRole,
+                    primId,
+                    primName,
+                    generatedNationalId,
+                    finalPhone,
+                    finalDeviceModel,
+                    isApproved,
+                    assignedIdsStr,
+                    assignedNamesStr,
+                    finalIqamaNum,
+                    finalIqamaStart,
+                    finalIqamaEnd,
+                    finalInsNumber,
+                    finalInsProvider,
+                    finalInsStart,
+                    finalInsEnd,
+                    finalPassport,
+                    finalNationality,
+                    finalContractEnd,
+                    finalSalary,
+                    finalHireDate,
+                    employmentEndDate.trim(),
+                    finalAnnualLeaves,
+                    finalCasualLeaves,
+                    finalSickLeaves,
+                    effectiveUsername,
+                    effectivePassword,
+                    accountRole,
+                    createOrLinkAccount,
+                    resetDeviceBinding,
+                  )
+                } else {
+                  onConfirm(
+                    fullName.trim(),
+                    finalRole,
+                    primId,
+                    primName,
+                    generatedNationalId,
+                    finalPhone,
+                    finalDeviceModel,
+                    isApproved,
+                    assignedIdsStr,
+                    assignedNamesStr,
+                    finalIqamaNum,
+                    finalIqamaStart,
+                    finalIqamaEnd,
+                    finalInsNumber,
+                    finalInsProvider,
+                    finalInsStart,
+                    finalInsEnd,
+                    finalPassport,
+                    finalNationality,
+                    finalContractEnd,
+                    finalSalary,
+                    finalHireDate,
+                    employmentEndDate.trim(),
+                    finalAnnualLeaves,
+                    finalCasualLeaves,
+                    finalSickLeaves,
+                  )
+                }
+              } else {
+                formValidationError = "Please enter worker full name."
               }
-            }
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedTextField(
-                value = annualLeavesStr,
-                onValueChange = { annualLeavesStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Annual (سنوية)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("21", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-              OutlinedTextField(
-                value = casualLeavesStr,
-                onValueChange = { casualLeavesStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Casual (عارضة)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("7", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-              OutlinedTextField(
-                value = sickLeavesStr,
-                onValueChange = { sickLeavesStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Sick (مرضية)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("14", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-              )
-            }
+            },
+            modifier = Modifier
+              .weight(1.3f)
+              .height(42.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
+          ) {
+            Text("Save Profile", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
           }
         }
-
-        // 7. Device Model Binding
-        OutlinedTextField(
-          value = deviceModel,
-          onValueChange = { deviceModel = it },
-          label = { Text("Approved Device Model", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-          textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-          colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.Black,
-            unfocusedTextColor = Color.Black,
-            focusedLabelColor = Color.Black,
-            unfocusedLabelColor = Color.Black,
-            focusedBorderColor = BentoBluePrimary,
-            unfocusedBorderColor = Color(0xFFCCCCCC),
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
-          ),
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth(),
-        )
       }
-    },
-    confirmButton = {
-      Button(
-        onClick = {
-          if (fullName.isNotBlank()) {
-            val selectedSites = sites.filter { selectedSiteIds.contains(it.id) }
-            val assignedIdsStr = if (selectedSites.isNotEmpty()) selectedSites.joinToString(",") { it.id } else sites.firstOrNull()?.id ?: ""
-            val assignedNamesStr = if (selectedSites.isNotEmpty()) selectedSites.joinToString(", ") { it.name } else sites.firstOrNull()?.name ?: ""
-            val primarySite = selectedSites.firstOrNull() ?: sites.firstOrNull()
-            val primId = primarySite?.id ?: ""
-            val primName = primarySite?.name ?: ""
-
-            val generatedNationalId = nationalId.ifBlank { "10" + (10000000..99999999).random() }.trim()
-            val finalIqamaNum = iqamaNumber.ifBlank { generatedNationalId }.trim()
-            val finalIqamaStart = iqamaStartDate.ifBlank { "2025-09-01" }.trim()
-            val finalIqamaEnd = iqamaEndDate.ifBlank { "2026-09-01" }.trim()
-
-            val finalInsNumber = insuranceNumber.ifBlank { "POL-" + (100000..999999).random() + "-BUPA" }.trim()
-            val finalInsProvider = insuranceProvider.ifBlank { "Bupa Arabia Insurance" }.trim()
-            val finalInsStart = insuranceStartDate.ifBlank { "2025-10-01" }.trim()
-            val finalInsEnd = insuranceEndDate.ifBlank { "2026-10-01" }.trim()
-
-            val finalPassport = passportNumber.ifBlank { "P" + (10000000..99999999).random() }.trim()
-            val finalNationality = nationality.ifBlank { "Saudi" }.trim()
-            val finalContractEnd = contractEndDate.ifBlank { "2027-09-01" }.trim()
-            val finalPhone = phone.ifBlank { "+966 5" + (10000000..99999999).random() }.trim()
-            val finalRole = role.ifBlank { "Field Technician" }.trim()
-            val finalDeviceModel = deviceModel.ifBlank { "Samsung Galaxy A54 5G" }.trim()
-            val finalSalary = salaryStr.toDoubleOrNull() ?: 0.0
-            val finalHireDate = hireDate.ifBlank { "2024-01-01" }.trim()
-            val finalAnnualLeaves = annualLeavesStr.toDoubleOrNull() ?: 21.0
-            val finalCasualLeaves = casualLeavesStr.toDoubleOrNull() ?: 7.0
-            val finalSickLeaves = sickLeavesStr.toDoubleOrNull() ?: 14.0
-
-            onConfirm(
-              fullName.trim(),
-              finalRole,
-              primId,
-              primName,
-              generatedNationalId,
-              finalPhone,
-              finalDeviceModel,
-              isApproved,
-              assignedIdsStr,
-              assignedNamesStr,
-              finalIqamaNum,
-              finalIqamaStart,
-              finalIqamaEnd,
-              finalInsNumber,
-              finalInsProvider,
-              finalInsStart,
-              finalInsEnd,
-              finalPassport,
-              finalNationality,
-              finalContractEnd,
-              finalSalary,
-              finalHireDate,
-              employmentEndDate.trim(),
-              finalAnnualLeaves,
-              finalCasualLeaves,
-              finalSickLeaves,
-            )
-          } else {
-            formValidationError = "Please enter the Worker Full Name / اسم العامل مطلوب."
-          }
-        },
-        enabled = true,
-        colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
-      ) {
-        Text("Save Staff Profile")
-      }
-    },
-    dismissButton = {
-      OutlinedButton(onClick = onDismiss) {
-        Text("Cancel", color = Color.Black)
-      }
-    },
-  )
+    }
+  }
 }
 
 // ==========================================
@@ -4057,7 +4531,7 @@ fun WorkSiteFormDialog(
               gpsErrorMessage = null
               gpsSuccessMessage = null
             },
-            label = { Text("Latitude * (خط العرض)", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+            label = { Text("Latitude *", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
             placeholder = { Text("e.g. 21.543333", fontSize = 11.sp, color = Color.Gray) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
@@ -4081,7 +4555,7 @@ fun WorkSiteFormDialog(
               gpsErrorMessage = null
               gpsSuccessMessage = null
             },
-            label = { Text("Longitude * (خط الطول)", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+            label = { Text("Longitude *", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
             placeholder = { Text("e.g. 39.172778", fontSize = 11.sp, color = Color.Gray) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),

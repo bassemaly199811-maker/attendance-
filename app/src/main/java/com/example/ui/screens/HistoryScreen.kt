@@ -112,6 +112,7 @@ import com.example.data.model.AttendanceStatus
 import com.example.data.model.WorkSite
 import com.example.data.model.WorkerEntity
 import com.example.data.model.WorkerOverview
+import com.example.data.model.isMissingCheckOut
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.ui.graphics.asImageBitmap
@@ -323,7 +324,7 @@ fun HistoryScreen(
     coroutineScope.launch {
       try {
         val uri = withContext(Dispatchers.IO) {
-          exportAttendanceToCsv(context, recordsToExport)
+          exportAttendanceToCsv(context, recordsToExport, periodLabel = periodLabel)
         }
         isExportingCsv = false
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -1597,22 +1598,44 @@ fun BentoHistoryCard(
   val context = LocalContext.current
   val empName = record.workerName.ifEmpty { "Main Employee" }
   val formattedDate = formatEnglishDateWithDay(record.workDate)
+  val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date()) }
+  val isToday = record.workDate == todayStr
+  val noteStr = record.notes ?: ""
+  val isMissingOut = record.isMissingCheckOut || record.checkOutTime.isNullOrBlank()
 
-  val statusColor =
-    if (record.isLate) BentoWarning
-    else if (record.status == AttendanceStatus.CHECKED_OUT || record.status == AttendanceStatus.CHECKED_IN) BentoSuccess
-    else BentoTextSecondary
+  val (statusLabel, statusColor, statusBg) = when {
+    noteStr.contains("إجازة", ignoreCase = true) || noteStr.contains("Leave", ignoreCase = true) ->
+      Triple("On Leave", BentoBluePrimary, BentoBlueContainer)
 
-  val statusBg =
-    if (record.isLate) BentoWarningContainer
-    else if (record.status == AttendanceStatus.CHECKED_OUT || record.status == AttendanceStatus.CHECKED_IN) BentoSuccessContainer
-    else BentoTileGray
+    record.status == AttendanceStatus.NOT_CHECKED_IN && record.checkInTime.isNullOrBlank() ->
+      Triple("Absent", BentoTextSecondary, BentoTileGray)
 
-  val statusLabel =
-    if (record.isLate) "Late Arrival"
-    else if (record.status == AttendanceStatus.CHECKED_OUT) "Completed On Time"
-    else if (record.status == AttendanceStatus.CHECKED_IN) "Currently Active"
-    else "Incomplete"
+    isMissingOut -> {
+      if (isToday && record.status == AttendanceStatus.CHECKED_IN &&
+        !noteStr.contains("لم يتم تسجيل الخروج") &&
+        !noteStr.contains("Auto-Closed", ignoreCase = true)
+      ) {
+        if (record.isLate) Triple("Late Arrival (Active)", BentoWarning, BentoWarningContainer)
+        else Triple("Currently Active", BentoBluePrimary, BentoBlueContainer)
+      } else {
+        if (record.isLate) Triple("Incomplete (Late / No Exit)", BentoError, BentoErrorContainer)
+        else Triple("Incomplete (No Check-Out)", BentoError, BentoErrorContainer)
+      }
+    }
+
+    record.isLate && record.isEarlyDeparture ->
+      Triple("Late & Early Exit", BentoError, BentoErrorContainer)
+
+    record.isLate ->
+      Triple("Late Arrival", BentoWarning, BentoWarningContainer)
+
+    record.isEarlyDeparture ->
+      Triple("Early Departure", BentoWarning, BentoWarningContainer)
+
+    else ->
+      Triple("Completed On Time", BentoSuccess, BentoSuccessContainer)
+  }
+
 
   Card(
     modifier = modifier
@@ -2013,7 +2036,10 @@ fun BentoHistoryCard(
                   color = Color.Black,
                 )
                 Text(
-                  text = if (record.status == AttendanceStatus.CHECKED_OUT) "In Cloud" else "Pending Check-Out",
+                  text = if (!record.checkOutPhotoUri.isNullOrBlank() || !record.checkOutPhotoBase64.isNullOrBlank()) "In Cloud"
+                  else if (isMissingOut) "No Check-Out"
+                  else if (record.status == AttendanceStatus.CHECKED_OUT) "Not Recorded"
+                  else "Pending Check-Out",
                   fontSize = 9.sp,
                   color = BentoTextSecondary,
                 )

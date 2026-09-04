@@ -592,8 +592,11 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
           repository.updateUser(adminUser.copy(boundDeviceId = "", boundDeviceModel = "", boundDeviceIp = ""))
         }
       } catch (e: Exception) {
-        Log.e("AttendanceViewModel", "Failed to sanitize admin devices: ${e.message}")
+        Log.e("AttendanceViewModel", "Error cleaning admin device locks: ${e.message}")
       }
+
+      // Auto-check and close any unfinished shifts from previous days
+      checkAndAutoCloseMissingCheckouts()
     }
   }
 
@@ -789,6 +792,34 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       }
 
       val success = repository.refreshFromFirestore(context)
+
+      // Automatically check and close unclosed shifts from previous days or past shift hours
+      val currentAccount = _uiState.value.currentUserAccount
+      val isAdmin = currentAccount?.role == UserRole.ADMIN
+      val currentWorkerName = currentAccount?.workerName ?: _uiState.value.workerProfile.fullName
+
+      repository.autoCloseUnclosedAttendanceRecords(
+        onNotifyAdmin = { workerName, workDate, checkInTime ->
+          if (isAdmin) {
+            com.example.service.AppNotificationHelper.sendAdminMissingCheckoutNotification(
+              context = context,
+              workerName = workerName,
+              workDate = workDate,
+              checkInTime = checkInTime,
+            )
+          }
+        },
+        onNotifyWorker = { workerName, workDate ->
+          if (!isAdmin && (workerName.equals(currentWorkerName, ignoreCase = true) || currentWorkerName.isBlank())) {
+            com.example.service.AppNotificationHelper.sendWorkerMissingCheckoutNotification(
+              context = context,
+              workerName = workerName,
+              workDate = workDate,
+            )
+          }
+        },
+      )
+
       val timeNow = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH).format(java.util.Date())
       _uiState.value =
         _uiState.value.copy(
@@ -886,16 +917,6 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
 
   fun updateSite(site: WorkSite) {
     viewModelScope.launch {
-      val online = checkNetworkStatus()
-      if (!online) {
-        triggerDetailedError(
-          title = "No Internet Connection",
-          message = "Updating a work site requires an active internet connection to sync with cloud.",
-          guidance = "Please connect to the internet and try again.",
-        )
-        return@launch
-      }
-
       if (!com.example.service.LocationHelper.validateCoordinates(site.latitude, site.longitude)) {
         triggerDetailedError(
           title = "Invalid GPS Coordinates",
@@ -917,51 +938,39 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       _uiState.value = _uiState.value.copy(isProcessing = true)
       repository.updateWorkSite(site)
 
-      if (_uiState.value.selectedSite.id == site.id) {
-        val realDist = repository.calculateDistanceMeters(
-          _uiState.value.deviceLatitude,
-          _uiState.value.deviceLongitude,
-          site.latitude,
-          site.longitude
+      val isCurrent = _uiState.value.selectedSite.id == site.id || 
+                      _uiState.value.selectedSite.name.equals(site.name, ignoreCase = true) ||
+                      _uiState.value.workerProfile.assignedSiteIds.contains(site.id)
+
+      val realDist = repository.calculateDistanceMeters(
+        _uiState.value.deviceLatitude,
+        _uiState.value.deviceLongitude,
+        site.latitude,
+        site.longitude
+      )
+      val distance =
+        if (_uiState.value.isOutsideSimulation) {
+          maxOf(realDist, site.radiusMeters + 150.0)
+        } else {
+          realDist
+        }
+
+      _uiState.value =
+        _uiState.value.copy(
+          selectedSite = if (isCurrent) site else _uiState.value.selectedSite,
+          currentDistanceMeters = if (isCurrent) distance else _uiState.value.currentDistanceMeters,
+          isInsideGeofence = if (isCurrent) (distance <= site.radiusMeters) else _uiState.value.isInsideGeofence,
+          isProcessing = false,
+          notificationMessage = "Work site updated: ${site.name} (Radius: ${site.radiusMeters}m)",
+          isNotificationError = false,
         )
-        val distance =
-          if (_uiState.value.isOutsideSimulation) {
-            maxOf(realDist, site.radiusMeters + 150.0)
-          } else {
-            realDist
-          }
-        _uiState.value =
-          _uiState.value.copy(
-            selectedSite = site,
-            currentDistanceMeters = distance,
-            isInsideGeofence = distance <= site.radiusMeters,
-            isProcessing = false,
-            notificationMessage = "Work site coordinates updated and geofence recalculated: ${site.name}",
-            isNotificationError = false,
-          )
-      } else {
-        _uiState.value =
-          _uiState.value.copy(
-            isProcessing = false,
-            notificationMessage = "Work site updated: ${site.name}",
-            isNotificationError = false,
-          )
-      }
     }
   }
 
+  fun updateWorkSite(site: WorkSite) = updateSite(site)
+
   fun deleteSite(siteId: String) {
     viewModelScope.launch {
-      val online = checkNetworkStatus()
-      if (!online) {
-        triggerDetailedError(
-          title = "No Internet Connection",
-          message = "Deleting a work site requires an active internet connection to sync with cloud.",
-          guidance = "Please connect to the internet and try again.",
-        )
-        return@launch
-      }
-
       _uiState.value = _uiState.value.copy(isProcessing = true)
       repository.deleteWorkSite(siteId)
       _uiState.value =
@@ -973,7 +982,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
-  // --- Workers CRUD ---
+  // --- Workers CRUD & Unified Worker/User Account Management ---
   fun addNewWorker(
     fullName: String,
     role: String,
@@ -1002,17 +1011,71 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
     casualLeaveTotal: Double = 7.0,
     sickLeaveTotal: Double = 14.0,
   ) {
-    viewModelScope.launch {
-      val online = checkNetworkStatus()
-      if (!online) {
-        triggerDetailedError(
-          title = "No Internet Connection",
-          message = "Adding a new worker requires an active internet connection to sync with cloud.",
-          guidance = "Please connect to the internet and try again.",
-        )
-        return@launch
-      }
+    addNewWorkerWithAccount(
+      fullName = fullName,
+      role = role,
+      siteId = siteId,
+      siteName = siteName,
+      nationalId = nationalId,
+      phone = phone,
+      deviceModel = deviceModel,
+      isApproved = isApproved,
+      assignedSiteIds = assignedSiteIds,
+      assignedSiteNames = assignedSiteNames,
+      iqamaNumber = iqamaNumber,
+      iqamaStartDate = iqamaStartDate,
+      iqamaEndDate = iqamaEndDate,
+      insuranceNumber = insuranceNumber,
+      insuranceProvider = insuranceProvider,
+      insuranceStartDate = insuranceStartDate,
+      insuranceEndDate = insuranceEndDate,
+      passportNumber = passportNumber,
+      nationality = nationality,
+      contractEndDate = contractEndDate,
+      salary = salary,
+      hireDate = hireDate,
+      employmentEndDate = employmentEndDate,
+      annualLeaveTotal = annualLeaveTotal,
+      casualLeaveTotal = casualLeaveTotal,
+      sickLeaveTotal = sickLeaveTotal,
+      username = null,
+      passwordPlain = null,
+      userRole = UserRole.WORKER,
+    )
+  }
 
+  fun addNewWorkerWithAccount(
+    fullName: String,
+    role: String,
+    siteId: String,
+    siteName: String,
+    nationalId: String,
+    phone: String,
+    deviceModel: String,
+    isApproved: Boolean,
+    assignedSiteIds: String = "",
+    assignedSiteNames: String = "",
+    iqamaNumber: String = "",
+    iqamaStartDate: String = "",
+    iqamaEndDate: String = "",
+    insuranceNumber: String = "",
+    insuranceProvider: String = "",
+    insuranceStartDate: String = "",
+    insuranceEndDate: String = "",
+    passportNumber: String = "",
+    nationality: String = "",
+    contractEndDate: String = "",
+    salary: Double = 0.0,
+    hireDate: String = "",
+    employmentEndDate: String = "",
+    annualLeaveTotal: Double = 21.0,
+    casualLeaveTotal: Double = 7.0,
+    sickLeaveTotal: Double = 14.0,
+    username: String? = null,
+    passwordPlain: String? = null,
+    userRole: UserRole = UserRole.WORKER,
+  ) {
+    viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isProcessing = true)
       val parts = fullName.trim().split(" ")
       val initials =
@@ -1024,30 +1087,30 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       val newWorker =
         WorkerEntity(
           id = "EMP-${1000 + (System.currentTimeMillis() % 9000)}",
-          fullName = fullName,
+          fullName = fullName.trim(),
           initials = initials,
-          role = role,
+          role = role.trim(),
           siteId = siteId,
           siteName = siteName,
-          nationalId = nationalId,
-          phoneNumber = phone,
-          deviceModel = if (deviceModel.isNotBlank()) deviceModel else "Samsung Galaxy Device",
+          nationalId = nationalId.trim(),
+          phoneNumber = phone.trim(),
+          deviceModel = if (deviceModel.isNotBlank()) deviceModel.trim() else "Approved Android Device",
           isDeviceApproved = isApproved,
           assignedSiteIds = if (assignedSiteIds.isNotBlank()) assignedSiteIds else siteId,
           assignedSiteNames = if (assignedSiteNames.isNotBlank()) assignedSiteNames else siteName,
-          iqamaNumber = iqamaNumber,
-          iqamaStartDate = iqamaStartDate,
-          iqamaEndDate = iqamaEndDate,
-          insuranceNumber = insuranceNumber,
-          insuranceProvider = insuranceProvider,
-          insuranceStartDate = insuranceStartDate,
-          insuranceEndDate = insuranceEndDate,
-          passportNumber = passportNumber,
-          nationality = nationality,
-          contractEndDate = contractEndDate,
+          iqamaNumber = iqamaNumber.trim(),
+          iqamaStartDate = iqamaStartDate.trim(),
+          iqamaEndDate = iqamaEndDate.trim(),
+          insuranceNumber = insuranceNumber.trim(),
+          insuranceProvider = insuranceProvider.trim(),
+          insuranceStartDate = insuranceStartDate.trim(),
+          insuranceEndDate = insuranceEndDate.trim(),
+          passportNumber = passportNumber.trim(),
+          nationality = nationality.trim(),
+          contractEndDate = contractEndDate.trim(),
           salary = salary,
-          hireDate = hireDate,
-          employmentEndDate = employmentEndDate,
+          hireDate = hireDate.trim(),
+          employmentEndDate = employmentEndDate.trim(),
         )
       repository.addWorker(newWorker)
 
@@ -1063,10 +1126,26 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       )
       repository.saveOrUpdateLeaveBalance(initialLeaveBalance)
 
+      // Automatically create linked User Account if username is provided
+      val cleanUsername = username?.trim()?.removePrefix("@")
+      if (!cleanUsername.isNullOrBlank()) {
+        val passHash = if (!passwordPlain.isNullOrBlank()) hashPasswordIfNeeded(passwordPlain.trim()) else hashPasswordIfNeeded("123456")
+        val newAccount = UserAccount(
+          username = cleanUsername,
+          passwordHash = passHash,
+          role = userRole,
+          workerId = newWorker.id,
+          workerName = newWorker.fullName,
+          boundDeviceId = if (userRole == UserRole.ADMIN) "" else (if (isApproved) "BOUND-${newWorker.id}" else ""),
+          boundDeviceModel = if (userRole == UserRole.ADMIN) "" else newWorker.deviceModel,
+        )
+        repository.addUser(newAccount)
+      }
+
       _uiState.value =
         _uiState.value.copy(
           isProcessing = false,
-          notificationMessage = "New worker registered with leave quota and synced: $fullName",
+          notificationMessage = "New worker registered with leave quota & user account: ${newWorker.fullName}",
           isNotificationError = false,
         )
     }
@@ -1369,23 +1448,90 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
   }
 
   fun updateWorker(worker: WorkerEntity) {
-    viewModelScope.launch {
-      val online = checkNetworkStatus()
-      if (!online) {
-        triggerDetailedError(
-          title = "No Internet Connection",
-          message = "Updating worker profile requires an active internet connection to sync with cloud.",
-          guidance = "Please connect to the internet and try again.",
-        )
-        return@launch
-      }
+    updateWorkerWithAccount(worker = worker)
+  }
 
+  fun updateWorkerWithAccount(
+    worker: WorkerEntity,
+    username: String? = null,
+    passwordPlain: String? = null,
+    userRole: UserRole? = null,
+    resetDeviceBinding: Boolean = false,
+  ) {
+    viewModelScope.launch {
       _uiState.value = _uiState.value.copy(isProcessing = true)
       repository.updateWorker(worker)
+
+      if (_uiState.value.workerProfile.id == worker.id) {
+        _uiState.value = _uiState.value.copy(
+          workerProfile = _uiState.value.workerProfile.copy(
+            fullName = worker.fullName,
+            initials = worker.initials,
+            role = worker.role,
+            nationalId = worker.nationalId,
+            phoneNumber = worker.phoneNumber,
+            deviceModel = worker.deviceModel,
+            isDeviceApproved = worker.isDeviceApproved,
+            assignedSiteIds = worker.assignedSiteIds,
+            assignedSiteNames = worker.assignedSiteNames,
+            iqamaNumber = worker.iqamaNumber,
+            iqamaStartDate = worker.iqamaStartDate,
+            iqamaEndDate = worker.iqamaEndDate,
+            insuranceNumber = worker.insuranceNumber,
+            insuranceProvider = worker.insuranceProvider,
+            insuranceStartDate = worker.insuranceStartDate,
+            insuranceEndDate = worker.insuranceEndDate,
+            passportNumber = worker.passportNumber,
+            nationality = worker.nationality,
+            salary = worker.salary,
+            hireDate = worker.hireDate,
+            employmentEndDate = worker.employmentEndDate,
+          )
+        )
+      }
+
+      val cleanUsername = username?.trim()?.removePrefix("@")
+      val existingAccount = repository.getUserByWorkerId(worker.id) ?: (if (!cleanUsername.isNullOrBlank()) repository.getUserByUsername(cleanUsername) else null)
+
+      if (existingAccount != null) {
+        val updatedPassword = if (!passwordPlain.isNullOrBlank()) hashPasswordIfNeeded(passwordPlain.trim()) else existingAccount.passwordHash
+        val updatedRole = userRole ?: existingAccount.role
+        val updatedBoundDevice = if (resetDeviceBinding || updatedRole == UserRole.ADMIN) "" else existingAccount.boundDeviceId
+        val updatedBoundModel = if (resetDeviceBinding || updatedRole == UserRole.ADMIN) "" else existingAccount.boundDeviceModel
+
+        val targetUsername = if (!cleanUsername.isNullOrBlank()) cleanUsername else existingAccount.username
+        val updatedAccount = existingAccount.copy(
+          username = targetUsername,
+          passwordHash = updatedPassword,
+          role = updatedRole,
+          workerId = worker.id,
+          workerName = worker.fullName,
+          boundDeviceId = updatedBoundDevice,
+          boundDeviceModel = updatedBoundModel,
+        )
+        if (targetUsername != existingAccount.username) {
+          repository.deleteUser(existingAccount.username)
+        }
+        repository.updateUser(updatedAccount)
+      } else if (!cleanUsername.isNullOrBlank()) {
+        val passHash = if (!passwordPlain.isNullOrBlank()) hashPasswordIfNeeded(passwordPlain.trim()) else hashPasswordIfNeeded("123456")
+        val roleToUse = userRole ?: UserRole.WORKER
+        val newAccount = UserAccount(
+          username = cleanUsername,
+          passwordHash = passHash,
+          role = roleToUse,
+          workerId = worker.id,
+          workerName = worker.fullName,
+          boundDeviceId = if (roleToUse == UserRole.ADMIN) "" else (if (worker.isDeviceApproved) "BOUND-${worker.id}" else ""),
+          boundDeviceModel = if (roleToUse == UserRole.ADMIN) "" else worker.deviceModel,
+        )
+        repository.addUser(newAccount)
+      }
+
       _uiState.value =
         _uiState.value.copy(
           isProcessing = false,
-          notificationMessage = "Worker details updated: ${worker.fullName}",
+          notificationMessage = "Worker & user account details updated: ${worker.fullName} ✓",
           isNotificationError = false,
         )
     }
@@ -1393,22 +1539,13 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
 
   fun deleteWorker(workerId: String) {
     viewModelScope.launch {
-      val online = checkNetworkStatus()
-      if (!online) {
-        triggerDetailedError(
-          title = "No Internet Connection",
-          message = "Deleting worker profile requires an active internet connection to sync with cloud.",
-          guidance = "Please connect to the internet and try again.",
-        )
-        return@launch
-      }
-
       _uiState.value = _uiState.value.copy(isProcessing = true)
       repository.deleteWorker(workerId)
+      repository.deleteUserByWorkerId(workerId)
       _uiState.value =
         _uiState.value.copy(
           isProcessing = false,
-          notificationMessage = "Worker deleted from system successfully",
+          notificationMessage = "Worker & linked account deleted from system successfully",
           isNotificationError = false,
         )
     }
@@ -2563,6 +2700,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
     }
   }
 
+  fun resetDeviceBinding(username: String) = resetDeviceBindingForUser(username)
+
   fun resetCurrentDeviceBinding() {
     val cur = _uiState.value.currentUserAccount ?: return
     resetDeviceBindingForUser(cur.username)
@@ -2634,7 +2773,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       )
       repository.submitLeaveRequest(req)
 
-      // Send local system notification to Admin on device
+      // Send notification: ONLY to Admin. NEVER send Admin notification to worker!
       com.example.service.AppNotificationHelper.sendAdminLeaveNotification(
         context = getApplication(),
         workerName = prof.fullName,
@@ -2649,6 +2788,47 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         isNotificationError = false,
         showLeaveSuccessPopup = true,
       )
+    }
+  }
+
+  /**
+   * Scans previous attendance records for workers who checked in but forgot to check out.
+   * Auto-closes the shift, writes in records that checkout was missing, and sends separate alerts to Admin & Worker.
+   */
+  fun checkAndAutoCloseMissingCheckouts() {
+    viewModelScope.launch {
+      val today = repository.getTodayDateString()
+      val records = allRecords.value
+      val openRecords = records.filter { it.status == AttendanceStatus.CHECKED_IN && it.workDate < today && it.checkOutTime.isNullOrBlank() }
+      openRecords.forEach { openRec ->
+        val currentNotes = openRec.notes ?: ""
+        val updatedNotes = if (currentNotes.isNotBlank()) {
+          "$currentNotes | لم يتم تسجيل الخروج في هذا اليوم (تم إنهاء وإغلاق اليوم تلقائياً)"
+        } else {
+          "لم يتم تسجيل الخروج في هذا اليوم (تم إنهاء وإغلاق اليوم تلقائياً)"
+        }
+        val closedRecord = openRec.copy(
+          status = AttendanceStatus.CHECKED_OUT,
+          checkOutTime = "05:00:00 PM",
+          notes = updatedNotes,
+        )
+        repository.updateAttendanceRecord(closedRecord)
+
+        // Send alert to Admin
+        com.example.service.AppNotificationHelper.sendAdminMissingCheckoutNotification(
+          context = getApplication(),
+          workerName = openRec.workerName,
+          workDate = openRec.workDate,
+          checkInTime = openRec.checkInTime,
+        )
+
+        // Send alert to Worker
+        com.example.service.AppNotificationHelper.sendWorkerMissingCheckoutNotification(
+          context = getApplication(),
+          workerName = openRec.workerName,
+          workDate = openRec.workDate,
+        )
+      }
     }
   }
 
@@ -2741,7 +2921,19 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       }
 
       val adminName = _uiState.value.currentUserAccount?.workerName ?: "Admin"
+      val req = allLeaveRequests.value.find { it.id == requestId }
       repository.approveLeaveRequest(requestId, adminName)
+
+      req?.let {
+        com.example.service.AppNotificationHelper.sendWorkerLeaveStatusNotification(
+          context = getApplication(),
+          workerName = it.workerName,
+          leaveType = it.leaveType.name,
+          status = "APPROVED",
+          adminNotes = null,
+        )
+      }
+
       _uiState.value = _uiState.value.copy(
         notificationMessage = "Leave request approved ✓",
         isNotificationError = false,
@@ -2761,7 +2953,19 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
       }
 
       val adminName = _uiState.value.currentUserAccount?.workerName ?: "Admin"
+      val req = allLeaveRequests.value.find { it.id == requestId }
       repository.rejectLeaveRequest(requestId, adminName, reason)
+
+      req?.let {
+        com.example.service.AppNotificationHelper.sendWorkerLeaveStatusNotification(
+          context = getApplication(),
+          workerName = it.workerName,
+          leaveType = it.leaveType.name,
+          status = "REJECTED",
+          adminNotes = reason,
+        )
+      }
+
       _uiState.value = _uiState.value.copy(
         notificationMessage = "Leave request rejected",
         isNotificationError = false,

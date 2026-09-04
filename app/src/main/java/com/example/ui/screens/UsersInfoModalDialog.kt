@@ -40,6 +40,7 @@ enum class WorkerDetailTab(val title: String, val titleAr: String, val icon: Ima
   LEAVES("Leaves", "الإجازات", Icons.Default.EventNote),
   ATTENDANCE("Attendance", "الحضور والانصراف", Icons.Default.Schedule),
   DOCUMENTS("Documents", "الوثائق والأوراق", Icons.Default.Description),
+  ACCOUNT("Account & Login", "حساب الدخول والأمان", Icons.Default.AdminPanelSettings),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,7 +51,13 @@ fun UsersInfoModalDialog(
   leaveRequests: List<LeaveRequest>,
   leaveBalances: List<LeaveBalance>,
   isOnline: Boolean,
+  users: List<UserAccount> = emptyList(),
+  sites: List<WorkSite> = emptyList(),
   onDismiss: () -> Unit,
+  onAddWorkerWithAccountClick: (() -> Unit)? = null,
+  onEditWorkerWithAccountClick: ((WorkerEntity, UserAccount?) -> Unit)? = null,
+  onDeleteWorkerClick: ((WorkerEntity) -> Unit)? = null,
+  onResetDeviceBinding: ((String) -> Unit)? = null,
   onUpdateWorkerDocuments: (
     workerId: String,
     iqamaNumber: String,
@@ -82,6 +89,8 @@ fun UsersInfoModalDialog(
   var selectedWorker by remember { mutableStateOf<WorkerEntity?>(null) }
   var isEditingDocuments by remember { mutableStateOf<WorkerEntity?>(null) }
   var feedbackSnackbarMessage by remember { mutableStateOf<String?>(null) }
+  var workerToDeleteConfirm by remember { mutableStateOf<WorkerEntity?>(null) }
+  var userToResetBindingConfirm by remember { mutableStateOf<UserAccount?>(null) }
 
   // Unique roles for filter chips
   val allRoles = remember(workers) {
@@ -89,9 +98,12 @@ fun UsersInfoModalDialog(
   }
 
   // Filtered workers list
-  val filteredWorkers = remember(workers, searchQuery, selectedRoleFilter) {
+  val filteredWorkers = remember(workers, searchQuery, selectedRoleFilter, users) {
     val q = searchQuery.trim().lowercase()
     workers.filter { worker ->
+      val linkedAccount = users.find { it.workerId == worker.id || it.workerName.equals(worker.fullName, ignoreCase = true) }
+      val usernameMatch = linkedAccount?.username?.lowercase()?.contains(q) == true
+
       val matchesSearch = q.isEmpty() ||
         worker.fullName.lowercase().contains(q) ||
         worker.id.lowercase().contains(q) ||
@@ -99,7 +111,8 @@ fun UsersInfoModalDialog(
         worker.nationalId.lowercase().contains(q) ||
         worker.iqamaNumber.lowercase().contains(q) ||
         worker.phoneNumber.lowercase().contains(q) ||
-        worker.siteName.lowercase().contains(q)
+        worker.siteName.lowercase().contains(q) ||
+        usernameMatch
 
       val matchesRole = selectedRoleFilter == "All" || worker.role.equals(selectedRoleFilter, ignoreCase = true)
       matchesSearch && matchesRole
@@ -117,14 +130,27 @@ fun UsersInfoModalDialog(
       if (selectedWorker != null) {
         // Detailed Worker View
         val currentWorker = workers.find { it.id == selectedWorker!!.id } ?: selectedWorker!!
+        val currentLinkedAccount = users.find { it.workerId == currentWorker.id || it.workerName.equals(currentWorker.fullName, ignoreCase = true) }
         WorkerFullDetailView(
           worker = currentWorker,
+          userAccount = currentLinkedAccount,
           records = records.filter { it.workerName.equals(currentWorker.fullName, ignoreCase = true) },
           workerLeaveRequests = leaveRequests.filter { it.workerId == currentWorker.id },
           workerLeaveBalance = leaveBalances.find { it.workerId == currentWorker.id } ?: LeaveBalance(workerId = currentWorker.id),
           isOnline = isOnline,
           onBack = { selectedWorker = null },
           onEditDocuments = { isEditingDocuments = currentWorker },
+          onEditWorkerAndAccount = {
+            onEditWorkerWithAccountClick?.invoke(currentWorker, currentLinkedAccount)
+          },
+          onDeleteWorker = {
+            workerToDeleteConfirm = currentWorker
+          },
+          onResetDeviceBinding = {
+            if (currentLinkedAccount != null) {
+              userToResetBindingConfirm = currentLinkedAccount
+            }
+          },
           onUpdateLeaveBalance = { annualTotal, casualTotal, sickTotal, annualUsed, casualUsed, sickUsed ->
             onUpdateLeaveBalance(currentWorker.id, annualTotal, casualTotal, sickTotal, annualUsed, casualUsed, sickUsed)
             feedbackSnackbarMessage = "Leave quota for ${currentWorker.fullName} updated successfully ✓"
@@ -164,30 +190,44 @@ fun UsersInfoModalDialog(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                       Text(
-                        text = "Users Info & Records",
-                        fontSize = 18.sp,
+                        text = "Workers & User Accounts",
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black,
                       )
                       Text(
-                        text = "معلومات وسجلات الموظفين الشاملة",
-                        fontSize = 12.sp,
+                        text = "دليل الموظفين وإدارة حسابات المستخدمين",
+                        fontSize = 11.5.sp,
                         color = BentoTextSecondary,
                       )
                     }
                   }
 
-                  Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = BentoBluePrimary.copy(alpha = 0.1f),
-                  ) {
-                    Text(
-                      text = "${filteredWorkers.size} / ${workers.size} Workers",
-                      fontSize = 12.sp,
-                      fontWeight = FontWeight.Bold,
-                      color = BentoBluePrimary,
-                      modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    )
+                  if (onAddWorkerWithAccountClick != null) {
+                    Button(
+                      onClick = onAddWorkerWithAccountClick,
+                      shape = RoundedCornerShape(12.dp),
+                      colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
+                      contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                      modifier = Modifier.height(38.dp),
+                    ) {
+                      Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                      Spacer(modifier = Modifier.width(4.dp))
+                      Text("+ Add Staff", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                  } else {
+                    Surface(
+                      shape = RoundedCornerShape(12.dp),
+                      color = BentoBluePrimary.copy(alpha = 0.1f),
+                    ) {
+                      Text(
+                        text = "${filteredWorkers.size} Staff",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BentoBluePrimary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                      )
+                    }
                   }
                 }
 
@@ -197,7 +237,7 @@ fun UsersInfoModalDialog(
                 OutlinedTextField(
                   value = searchQuery,
                   onValueChange = { searchQuery = it },
-                  placeholder = { Text("Search by name, ID, phone, role, or site...", color = Color.DarkGray, fontSize = 13.sp) },
+                  placeholder = { Text("Search by name, ID, @username, phone, role, site...", color = Color.DarkGray, fontSize = 12.5.sp) },
                   leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Black) },
                   trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -277,7 +317,7 @@ fun UsersInfoModalDialog(
                   color = Color.Black,
                 )
                 Text(
-                  text = "Try adjusting your search keywords or filter criteria.",
+                  text = "Try adjusting your search keywords or tap '+ Add Staff' to register a new worker.",
                   fontSize = 13.sp,
                   color = BentoTextSecondary,
                   textAlign = TextAlign.Center,
@@ -296,13 +336,21 @@ fun UsersInfoModalDialog(
                 val workerRecordsCount = records.count { it.workerName.equals(worker.fullName, ignoreCase = true) }
                 val workerLeavesCount = leaveRequests.count { it.workerId == worker.id }
                 val workerBalance = leaveBalances.find { it.workerId == worker.id } ?: LeaveBalance(workerId = worker.id)
+                val linkedAccount = users.find { it.workerId == worker.id || it.workerName.equals(worker.fullName, ignoreCase = true) }
 
                 UserInfoWorkerCard(
                   worker = worker,
+                  userAccount = linkedAccount,
                   recordsCount = workerRecordsCount,
                   leavesCount = workerLeavesCount,
                   leaveBalance = workerBalance,
                   onClick = { selectedWorker = worker },
+                  onEditClick = {
+                    onEditWorkerWithAccountClick?.invoke(worker, linkedAccount)
+                  },
+                  onDeleteClick = {
+                    workerToDeleteConfirm = worker
+                  },
                 )
               }
 
@@ -314,6 +362,67 @@ fun UsersInfoModalDialog(
         }
       }
     }
+  }
+
+  // Delete Worker Confirmation Dialog
+  if (workerToDeleteConfirm != null) {
+    val targetWorker = workerToDeleteConfirm!!
+    AlertDialog(
+      onDismissRequest = { workerToDeleteConfirm = null },
+      title = { Text("Delete Worker & User Account", fontWeight = FontWeight.Bold) },
+      text = {
+        Text("Are you sure you want to delete (${targetWorker.fullName}) and their linked user login account from the system?")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            onDeleteWorkerClick?.invoke(targetWorker)
+            if (selectedWorker?.id == targetWorker.id) {
+              selectedWorker = null
+            }
+            workerToDeleteConfirm = null
+            feedbackSnackbarMessage = "Worker ${targetWorker.fullName} and linked account removed."
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = BentoError),
+        ) {
+          Text("Delete")
+        }
+      },
+      dismissButton = {
+        OutlinedButton(onClick = { workerToDeleteConfirm = null }) {
+          Text("Cancel")
+        }
+      },
+    )
+  }
+
+  // Reset Device Binding Confirmation Dialog
+  if (userToResetBindingConfirm != null) {
+    val targetUser = userToResetBindingConfirm!!
+    AlertDialog(
+      onDismissRequest = { userToResetBindingConfirm = null },
+      title = { Text("Reset Device Binding", fontWeight = FontWeight.Bold) },
+      text = {
+        Text("Resetting hardware binding will unbind @${targetUser.username} from their current phone (${targetUser.boundDeviceModel.ifBlank { "Bound Device" }}), allowing them to login on a new device.")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            onResetDeviceBinding?.invoke(targetUser.username)
+            userToResetBindingConfirm = null
+            feedbackSnackbarMessage = "Device binding for @${targetUser.username} has been reset."
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
+        ) {
+          Text("Reset Binding")
+        }
+      },
+      dismissButton = {
+        OutlinedButton(onClick = { userToResetBindingConfirm = null }) {
+          Text("Cancel")
+        }
+      },
+    )
   }
 
   // Document Editing Dialog
@@ -373,10 +482,13 @@ fun UsersInfoModalDialog(
 @Composable
 private fun UserInfoWorkerCard(
   worker: WorkerEntity,
+  userAccount: UserAccount? = null,
   recordsCount: Int,
   leavesCount: Int,
   leaveBalance: LeaveBalance? = null,
   onClick: () -> Unit,
+  onEditClick: () -> Unit = {},
+  onDeleteClick: () -> Unit = {},
 ) {
   val balance = leaveBalance ?: LeaveBalance(workerId = worker.id)
 
@@ -398,7 +510,7 @@ private fun UserInfoWorkerCard(
           modifier = Modifier
             .size(46.dp)
             .clip(CircleShape)
-            .background(BentoBluePrimary),
+            .background(if (userAccount?.role == UserRole.ADMIN) Color(0xFF673AB7) else BentoBluePrimary),
           contentAlignment = Alignment.Center,
         ) {
           Text(
@@ -421,6 +533,21 @@ private fun UserInfoWorkerCard(
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
+            if (userAccount?.role == UserRole.ADMIN) {
+              Spacer(modifier = Modifier.width(6.dp))
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFFEDE7F6),
+              ) {
+                Text(
+                  text = "ADMIN",
+                  fontSize = 9.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color(0xFF673AB7),
+                  modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                )
+              }
+            }
           }
           Spacer(modifier = Modifier.height(2.dp))
           Text(
@@ -430,14 +557,63 @@ private fun UserInfoWorkerCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
+
+          // User Account Credentials Badge
+          Spacer(modifier = Modifier.height(3.dp))
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            if (userAccount != null) {
+              Icon(Icons.Default.AccountCircle, contentDescription = null, tint = BentoBluePrimary, modifier = Modifier.size(13.dp))
+              Spacer(modifier = Modifier.width(3.dp))
+              Text(
+                text = "@${userAccount.username}",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = BentoBluePrimary,
+              )
+              if (userAccount.boundDeviceId.isNotBlank()) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = BentoSuccess, modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.width(2.dp))
+                Text(
+                  text = "Bound",
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = BentoSuccess,
+                )
+              }
+            } else {
+              Icon(Icons.Default.PersonOff, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(12.dp))
+              Spacer(modifier = Modifier.width(3.dp))
+              Text(
+                text = "No Login Account",
+                fontSize = 10.5.sp,
+                color = Color.Gray,
+              )
+            }
+          }
         }
 
-        Icon(
-          imageVector = Icons.Default.ChevronRight,
-          contentDescription = "View Details",
-          tint = Color.Black,
-          modifier = Modifier.size(24.dp),
-        )
+        // Quick Actions (Edit & Delete)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          IconButton(
+            onClick = onEditClick,
+            modifier = Modifier.size(34.dp),
+          ) {
+            Icon(Icons.Default.Edit, contentDescription = "Edit Worker & Account", tint = BentoBluePrimary, modifier = Modifier.size(18.dp))
+          }
+          IconButton(
+            onClick = onDeleteClick,
+            modifier = Modifier.size(34.dp),
+          ) {
+            Icon(Icons.Default.Delete, contentDescription = "Delete Worker", tint = BentoError, modifier = Modifier.size(18.dp))
+          }
+          Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = "View Details",
+            tint = Color.Black,
+            modifier = Modifier.size(20.dp),
+          )
+        }
       }
 
       Spacer(modifier = Modifier.height(10.dp))
@@ -528,12 +704,16 @@ private fun UserInfoWorkerCard(
 @Composable
 private fun WorkerFullDetailView(
   worker: WorkerEntity,
+  userAccount: UserAccount? = null,
   records: List<AttendanceRecord>,
   workerLeaveRequests: List<LeaveRequest>,
   workerLeaveBalance: LeaveBalance,
   isOnline: Boolean,
   onBack: () -> Unit,
   onEditDocuments: () -> Unit,
+  onEditWorkerAndAccount: () -> Unit = {},
+  onDeleteWorker: () -> Unit = {},
+  onResetDeviceBinding: () -> Unit = {},
   onUpdateLeaveBalance: (
     annualTotal: Double,
     casualTotal: Double,
@@ -599,21 +779,33 @@ private fun WorkerFullDetailView(
                   color = Color.Black,
                 )
                 Text(
-                  text = "ID: ${worker.id} • ${worker.role}",
+                  text = "ID: ${worker.id} • ${worker.role}" + if (userAccount != null) " • @${userAccount.username}" else "",
                   fontSize = 12.sp,
                   color = BentoTextSecondary,
                 )
               }
             }
 
-            IconButton(
-              onClick = onBack,
-              modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(Color(0xFFF0F0F0))
-            ) {
-              Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Black)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              IconButton(
+                onClick = onEditWorkerAndAccount,
+                modifier = Modifier
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(BentoBlueContainer)
+              ) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit Profile & Login", tint = BentoBluePrimary, modifier = Modifier.size(18.dp))
+              }
+              Spacer(modifier = Modifier.width(6.dp))
+              IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(Color(0xFFF0F0F0))
+              ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Black)
+              }
             }
           }
 
@@ -638,7 +830,7 @@ private fun WorkerFullDetailView(
                 modifier = Modifier
                   .size(44.dp)
                   .clip(CircleShape)
-                  .background(BentoBluePrimary),
+                  .background(if (userAccount?.role == UserRole.ADMIN) Color(0xFF673AB7) else BentoBluePrimary),
                 contentAlignment = Alignment.Center,
               ) {
                 Text(
@@ -662,7 +854,7 @@ private fun WorkerFullDetailView(
                   color = Color.Black,
                 )
                 Text(
-                  text = "Site: ${worker.siteName.ifBlank { "All Sites" }}",
+                  text = "Site: ${worker.siteName.ifBlank { "All Sites" }}" + if (userAccount != null) " • @${userAccount.username} (${userAccount.role.name})" else "",
                   fontSize = 11.5.sp,
                   color = BentoTextSecondary,
                 )
@@ -672,7 +864,7 @@ private fun WorkerFullDetailView(
 
           Spacer(modifier = Modifier.height(8.dp))
 
-          // Three Sub-Tabs Selector
+          // Four Sub-Tabs Selector
           TabRow(
             selectedTabIndex = selectedTab.ordinal,
             containerColor = Color.White,
@@ -696,12 +888,12 @@ private fun WorkerFullDetailView(
                       imageVector = tab.icon,
                       contentDescription = null,
                       tint = if (isSelected) BentoBluePrimary else Color.Black,
-                      modifier = Modifier.size(16.dp),
+                      modifier = Modifier.size(15.dp),
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                      text = "${tab.title} / ${tab.titleAr}",
-                      fontSize = 12.sp,
+                      text = tab.title,
+                      fontSize = 11.5.sp,
                       fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                       color = if (isSelected) BentoBluePrimary else Color.Black,
                     )
@@ -740,7 +932,239 @@ private fun WorkerFullDetailView(
             onEditDocuments = onEditDocuments,
           )
         }
+        WorkerDetailTab.ACCOUNT -> {
+          WorkerAccountSubView(
+            worker = worker,
+            userAccount = userAccount,
+            onEditWorkerAndAccount = onEditWorkerAndAccount,
+            onDeleteWorker = onDeleteWorker,
+            onResetDeviceBinding = onResetDeviceBinding,
+          )
+        }
       }
+    }
+  }
+}
+
+// ==========================================
+// --- WORKER USER ACCOUNT & ACCESS SUB-VIEW ---
+// ==========================================
+@Composable
+private fun WorkerAccountSubView(
+  worker: WorkerEntity,
+  userAccount: UserAccount?,
+  onEditWorkerAndAccount: () -> Unit,
+  onDeleteWorker: () -> Unit,
+  onResetDeviceBinding: () -> Unit,
+) {
+  LazyColumn(
+    modifier = Modifier
+      .fillMaxSize()
+      .padding(horizontal = 16.dp, vertical = 12.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp),
+  ) {
+    // 1. Account Credentials Card
+    item {
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, BentoOutline),
+      ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(if (userAccount?.role == UserRole.ADMIN) Color(0xFFEDE7F6) else BentoBlueContainer),
+                contentAlignment = Alignment.Center,
+              ) {
+                Icon(
+                  imageVector = if (userAccount?.role == UserRole.ADMIN) Icons.Default.AdminPanelSettings else Icons.Default.Person,
+                  contentDescription = null,
+                  tint = if (userAccount?.role == UserRole.ADMIN) Color(0xFF673AB7) else BentoBluePrimary,
+                  modifier = Modifier.size(20.dp),
+                )
+              }
+              Spacer(modifier = Modifier.width(10.dp))
+              Column {
+                Text(
+                  text = "User Login Account / حساب الدخول",
+                  fontSize = 14.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color.Black,
+                )
+                Text(
+                  text = if (userAccount != null) "Credentials linked to this employee" else "No login account created yet",
+                  fontSize = 11.sp,
+                  color = BentoTextSecondary,
+                )
+              }
+            }
+
+            if (userAccount != null) {
+              Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = BentoSuccessContainer,
+              ) {
+                Text(
+                  text = "Active Account ✓",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = BentoSuccess,
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+              }
+            }
+          }
+
+          HorizontalDivider(color = BentoOutline.copy(alpha = 0.5f))
+
+          if (userAccount != null) {
+            DetailInfoRow(label = "Username / اسم المستخدم", value = "@${userAccount.username}", isBold = true)
+            DetailInfoRow(label = "Account Role / الصلاحية", value = if (userAccount.role == UserRole.ADMIN) "Administrator (مدير نظام)" else "Worker (عامل / موظف)")
+            DetailInfoRow(label = "Password / كلمة المرور", value = "•••••••• (Encrypted & Secure)")
+            DetailInfoRow(label = "Worker ID Binding", value = userAccount.workerId.ifBlank { worker.id })
+          } else {
+            Surface(
+              shape = RoundedCornerShape(10.dp),
+              color = Color(0xFFFFF8E1),
+              border = BorderStroke(1.dp, Color(0xFFFFD54F)),
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFFF57F17), modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                  text = "This worker does not have an active login account. Tap 'Edit Profile & Login' to create their username and password.",
+                  fontSize = 12.sp,
+                  color = Color(0xFF5D4037),
+                )
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Hardware Device Binding & Biometrics Card
+    item {
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, BentoOutline),
+      ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(Color(0xFFE8F5E9)),
+                contentAlignment = Alignment.Center,
+              ) {
+                Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = BentoSuccess, modifier = Modifier.size(20.dp))
+              }
+              Spacer(modifier = Modifier.width(10.dp))
+              Column {
+                Text(
+                  text = "Hardware Device Binding / قفل الجهاز",
+                  fontSize = 14.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color.Black,
+                )
+                Text(
+                  text = "Anti-proxy & device security protection",
+                  fontSize = 11.sp,
+                  color = BentoTextSecondary,
+                )
+              }
+            }
+          }
+
+          HorizontalDivider(color = BentoOutline.copy(alpha = 0.5f))
+
+          val boundDev = userAccount?.boundDeviceId ?: ""
+          val boundModel = userAccount?.boundDeviceModel?.ifBlank { worker.deviceModel } ?: worker.deviceModel
+
+          DetailInfoRow(label = "Approved Model / الجهاز المعتمد", value = boundModel.ifBlank { "Any Verified Android Phone" })
+          DetailInfoRow(
+            label = "Hardware UUID / معرف الجهاز",
+            value = if (boundDev.isNotBlank()) boundDev else "Not Bound (Will lock on first login)",
+            valueColor = if (boundDev.isNotBlank()) BentoSuccess else Color.DarkGray,
+          )
+
+          if (userAccount != null && boundDev.isNotBlank()) {
+            OutlinedButton(
+              onClick = onResetDeviceBinding,
+              modifier = Modifier.fillMaxWidth(),
+              shape = RoundedCornerShape(10.dp),
+              border = BorderStroke(1.dp, BentoWarning),
+              colors = ButtonDefaults.outlinedButtonColors(containerColor = BentoWarningContainer.copy(alpha = 0.3f)),
+            ) {
+              Icon(Icons.Default.LockReset, contentDescription = null, tint = BentoWarning, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Reset Device Binding / إلغاء قفل الجهاز", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BentoWarning)
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Administrative Actions
+    item {
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, BentoOutline),
+      ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("Staff Actions / إجراءات الموظف", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+
+          Button(
+            onClick = onEditWorkerAndAccount,
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
+          ) {
+            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Edit Profile & User Account / تعديل البيانات والحساب", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+          }
+
+          OutlinedButton(
+            onClick = onDeleteWorker,
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, BentoError),
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = BentoErrorContainer.copy(alpha = 0.3f)),
+          ) {
+            Icon(Icons.Default.Delete, contentDescription = null, tint = BentoError, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Delete Worker & Linked Account / حذف الموظف والحساب", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = BentoError)
+          }
+        }
+      }
+    }
+
+    item {
+      Spacer(modifier = Modifier.height(24.dp))
     }
   }
 }
@@ -1248,8 +1672,14 @@ private fun WorkerAttendanceSubView(
     filteredRecords.take(visibleAttendanceCount)
   }
 
+  val todayDateStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date()) }
   val totalLogs = filteredRecords.size
-  val onTimeLogs = filteredRecords.count { !it.isLate && it.checkInTime != null }
+  val onTimeLogs = filteredRecords.count {
+    !it.isLate && !it.checkInTime.isNullOrBlank() && !it.checkOutTime.isNullOrBlank() &&
+      it.notes?.contains("لم يتم تسجيل الخروج") != true &&
+      it.notes?.contains("Auto-Closed", ignoreCase = true) != true &&
+      it.notes?.contains("Missing Check-Out", ignoreCase = true) != true
+  }
   val lateLogs = filteredRecords.count { it.isLate }
 
   LazyColumn(
@@ -1408,6 +1838,43 @@ private fun WorkerAttendanceSubView(
       }
     } else {
       items(visibleRecords, key = { it.id }) { record ->
+        val isRecordToday = record.workDate == todayDateStr
+        val recordNote = record.notes ?: ""
+        val isMissingCheckout = record.isMissingCheckOut || record.checkOutTime.isNullOrBlank()
+
+        val (badgeText, badgeColor, badgeBg) = when {
+          recordNote.contains("إجازة", ignoreCase = true) || recordNote.contains("Leave", ignoreCase = true) ->
+            Triple("ON LEAVE", BentoBluePrimary, BentoBlueContainer)
+
+          record.status == AttendanceStatus.NOT_CHECKED_IN && record.checkInTime.isNullOrBlank() ->
+            Triple("ABSENT", BentoTextSecondary, BentoTileGray)
+
+          isMissingCheckout -> {
+            if (isRecordToday && record.status == AttendanceStatus.CHECKED_IN &&
+              !recordNote.contains("لم يتم تسجيل الخروج") &&
+              !recordNote.contains("Auto-Closed", ignoreCase = true)
+            ) {
+              if (record.isLate) Triple("LATE (ACTIVE)", BentoWarning, BentoWarningContainer)
+              else Triple("ACTIVE NOW", BentoBluePrimary, BentoBlueContainer)
+            } else {
+              if (record.isLate) Triple("INCOMPLETE (LATE)", BentoError, BentoErrorContainer)
+              else Triple("INCOMPLETE", BentoError, BentoErrorContainer)
+            }
+          }
+
+          record.isLate && record.isEarlyDeparture ->
+            Triple("LATE & EARLY EXIT", BentoError, BentoErrorContainer)
+
+          record.isLate ->
+            Triple("LATE ARRIVAL", BentoError, Color(0xFFFFEBEE))
+
+          record.isEarlyDeparture ->
+            Triple("EARLY EXIT", BentoWarning, Color(0xFFFFF3E0))
+
+          else ->
+            Triple("ON TIME ✓", BentoSuccess, Color(0xFFE8F5E9))
+        }
+
         Card(
           modifier = Modifier.fillMaxWidth(),
           shape = RoundedCornerShape(16.dp),
@@ -1434,13 +1901,13 @@ private fun WorkerAttendanceSubView(
 
               Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = if (record.isLate) Color(0xFFFFEBEE) else Color(0xFFE8F5E9),
+                color = badgeBg,
               ) {
                 Text(
-                  text = if (record.isLate) "LATE ARRIVAL" else "ON TIME ✓",
+                  text = badgeText,
                   fontSize = 10.5.sp,
                   fontWeight = FontWeight.Bold,
-                  color = if (record.isLate) BentoError else BentoSuccess,
+                  color = badgeColor,
                   modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
               }
@@ -1474,14 +1941,16 @@ private fun WorkerAttendanceSubView(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                  Icon(Icons.Default.Logout, contentDescription = null, tint = Color(0xFFE65100), modifier = Modifier.size(14.dp))
+                  Icon(Icons.Default.Logout, contentDescription = null, tint = if (isMissingCheckout) BentoError else Color(0xFFE65100), modifier = Modifier.size(14.dp))
                   Spacer(modifier = Modifier.width(4.dp))
                   Text("Check-Out: ", fontSize = 11.5.sp, color = Color.DarkGray)
                   Text(
-                    text = record.checkOutTime ?: "In Progress",
+                    text = if (!record.checkOutTime.isNullOrBlank()) record.checkOutTime
+                    else if (isRecordToday && record.status == AttendanceStatus.CHECKED_IN && !recordNote.contains("لم يتم تسجيل الخروج") && !recordNote.contains("Auto-Closed", ignoreCase = true)) "In Progress"
+                    else "Missing (Incomplete)",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black,
+                    color = if (isMissingCheckout && (!isRecordToday || record.status != AttendanceStatus.CHECKED_IN)) BentoError else Color.Black,
                   )
                 }
               }
@@ -2315,4 +2784,33 @@ private fun EditWorkerDocumentsDialog(
     containerColor = Color.White,
     shape = RoundedCornerShape(18.dp),
   )
+}
+
+@Composable
+private fun DetailInfoRow(
+  label: String,
+  value: String,
+  isBold: Boolean = false,
+  valueColor: Color = Color.Black,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(
+      text = label,
+      fontSize = 12.sp,
+      color = BentoTextSecondary,
+      modifier = Modifier.weight(1f),
+    )
+    Text(
+      text = value,
+      fontSize = 12.5.sp,
+      fontWeight = if (isBold) FontWeight.Bold else FontWeight.Medium,
+      color = valueColor,
+      textAlign = TextAlign.End,
+      modifier = Modifier.weight(1f),
+    )
+  }
 }

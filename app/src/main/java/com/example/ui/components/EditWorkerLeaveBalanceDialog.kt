@@ -72,7 +72,7 @@ fun EditWorkerLeaveBalanceDialog(
         }
         Spacer(modifier = Modifier.width(10.dp))
         Column {
-          Text("Edit Leave Quota / تعديل رصيد الإجازات", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.Black)
+          Text("Edit Leave Quota", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.Black)
           Text(worker.fullName, fontSize = 12.sp, color = BentoTextSecondary, fontWeight = FontWeight.SemiBold)
         }
       }
@@ -82,22 +82,22 @@ fun EditWorkerLeaveBalanceDialog(
         modifier = Modifier
           .fillMaxWidth()
           .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
         // Annual Leave Section
         Surface(
-          shape = RoundedCornerShape(12.dp),
+          shape = RoundedCornerShape(10.dp),
           color = Color(0xFFF0F7FF),
           border = BorderStroke(1.dp, BentoBluePrimary.copy(alpha = 0.35f)),
           modifier = Modifier.fillMaxWidth(),
         ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Text("Annual Leave / إجازة سنوية", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BentoBluePrimary)
+              Text("Annual Leave", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = BentoBluePrimary)
               Surface(shape = RoundedCornerShape(6.dp), color = BentoBluePrimary.copy(alpha = 0.15f)) {
                 Text(
                   "Available: ${annualAvailable.toInt()} d",
@@ -112,8 +112,8 @@ fun EditWorkerLeaveBalanceDialog(
               OutlinedTextField(
                 value = annualTotalStr,
                 onValueChange = { annualTotalStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Total Allowed (الإجمالي)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                label = { Text("Total Allowed", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Bold),
                 colors = OutlinedTextFieldDefaults.colors(
                   focusedTextColor = Color.Black,
                   unfocusedTextColor = Color.Black,
@@ -130,8 +130,8 @@ fun EditWorkerLeaveBalanceDialog(
               OutlinedTextField(
                 value = annualUsedStr,
                 onValueChange = { annualUsedStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Used (المستهلك)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                label = { Text("Used", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Bold),
                 colors = OutlinedTextFieldDefaults.colors(
                   focusedTextColor = Color.Black,
                   unfocusedTextColor = Color.Black,
@@ -151,18 +151,18 @@ fun EditWorkerLeaveBalanceDialog(
 
         // Casual Leave Section
         Surface(
-          shape = RoundedCornerShape(12.dp),
+          shape = RoundedCornerShape(10.dp),
           color = Color(0xFFFFF7ED),
           border = BorderStroke(1.dp, Color(0xFFF97316).copy(alpha = 0.35f)),
           modifier = Modifier.fillMaxWidth(),
         ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Text("Casual Leave / إجازة عارضة", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFC2410C))
+              Text("Casual Leave", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFFC2410C))
               Surface(shape = RoundedCornerShape(6.dp), color = Color(0xFFF97316).copy(alpha = 0.15f)) {
                 Text(
                   "Available: ${casualAvailable.toInt()} d",
@@ -177,8 +177,8 @@ fun EditWorkerLeaveBalanceDialog(
               OutlinedTextField(
                 value = casualTotalStr,
                 onValueChange = { casualTotalStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Total Allowed (الإجمالي)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                label = { Text("Total Allowed", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Bold),
                 colors = OutlinedTextFieldDefaults.colors(
                   focusedTextColor = Color.Black,
                   unfocusedTextColor = Color.Black,
@@ -195,8 +195,8 @@ fun EditWorkerLeaveBalanceDialog(
               OutlinedTextField(
                 value = casualUsedStr,
                 onValueChange = { casualUsedStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Used (المستهلك)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                label = { Text("Used", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Bold),
                 colors = OutlinedTextFieldDefaults.colors(
                   focusedTextColor = Color.Black,
                   unfocusedTextColor = Color.Black,
@@ -216,18 +216,18 @@ fun EditWorkerLeaveBalanceDialog(
 
         // Sick Leave Section
         Surface(
-          shape = RoundedCornerShape(12.dp),
+          shape = RoundedCornerShape(10.dp),
           color = Color(0xFFF0FDF4),
           border = BorderStroke(1.dp, BentoSuccess.copy(alpha = 0.35f)),
           modifier = Modifier.fillMaxWidth(),
         ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Text("Sick Leave / إجازة مرضية", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BentoSuccess)
+              Text("Sick Leave", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = BentoSuccess)
               Surface(shape = RoundedCornerShape(6.dp), color = BentoSuccess.copy(alpha = 0.15f)) {
                 Text(
                   "Available: ${sickAvailable.toInt()} d",
@@ -242,8 +242,8 @@ fun EditWorkerLeaveBalanceDialog(
               OutlinedTextField(
                 value = sickTotalStr,
                 onValueChange = { sickTotalStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Total Allowed (الإجمالي)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                label = { Text("Total Allowed", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Bold),
                 colors = OutlinedTextFieldDefaults.colors(
                   focusedTextColor = Color.Black,
                   unfocusedTextColor = Color.Black,
@@ -260,8 +260,8 @@ fun EditWorkerLeaveBalanceDialog(
               OutlinedTextField(
                 value = sickUsedStr,
                 onValueChange = { sickUsedStr = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Used (المستهلك)", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                label = { Text("Used", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Bold),
                 colors = OutlinedTextFieldDefaults.colors(
                   focusedTextColor = Color.Black,
                   unfocusedTextColor = Color.Black,
@@ -294,7 +294,7 @@ fun EditWorkerLeaveBalanceDialog(
         },
         colors = ButtonDefaults.buttonColors(containerColor = BentoBluePrimary),
       ) {
-        Text("Save Leave Quota / حفظ الرصيد")
+        Text("Save Quota")
       }
     },
     dismissButton = {

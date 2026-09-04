@@ -134,6 +134,9 @@ interface AttendanceDao {
   @Query("SELECT * FROM user_accounts WHERE username = :username LIMIT 1")
   suspend fun getUserByUsername(username: String): UserAccount?
 
+  @Query("SELECT * FROM user_accounts WHERE workerId = :workerId LIMIT 1")
+  suspend fun getUserByWorkerId(workerId: String): UserAccount?
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertUser(user: UserAccount)
 
@@ -148,6 +151,9 @@ interface AttendanceDao {
 
   @Query("DELETE FROM user_accounts WHERE username = :username")
   suspend fun deleteUserByUsername(username: String)
+
+  @Query("DELETE FROM user_accounts WHERE workerId = :workerId")
+  suspend fun deleteUserByWorkerId(workerId: String)
 
   // Leave Requests CRUD
   @Query("SELECT * FROM leave_requests ORDER BY id DESC")

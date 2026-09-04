@@ -579,6 +579,55 @@ class AttendanceRepository(
     return AttendanceResult.Success(successMsg, updatedRecord)
   }
 
+  /**
+   * Scans all attendance records and automatically closes any incomplete shifts
+   * (checked in but never checked out) for past dates or past today's shift end.
+   */
+  suspend fun autoCloseUnclosedAttendanceRecords(
+    onNotifyAdmin: ((workerName: String, workDate: String, checkInTime: String?) -> Unit)? = null,
+    onNotifyWorker: ((workerName: String, workDate: String) -> Unit)? = null,
+  ): List<AttendanceRecord> {
+    val allRecords = dao.getAllAttendanceRecordsDirect()
+    val today = getTodayDateString()
+    val shiftConfig = getShiftConfig()
+    val isPastShiftEnd = !isBeforeShiftEndTime(shiftConfig)
+    val closedRecords = mutableListOf<AttendanceRecord>()
+
+    for (rec in allRecords) {
+      val isUnclosed = rec.status == AttendanceStatus.CHECKED_IN && rec.checkOutTime.isNullOrBlank()
+      if (!isUnclosed) continue
+
+      val shouldClose = rec.workDate < today || (rec.workDate == today && isPastShiftEnd)
+      if (shouldClose) {
+        val existingNotes = rec.notes ?: ""
+        if (existingNotes.contains("لم يتم تسجيل الخروج في هذا اليوم")) {
+          // Already marked, update status if not checked out
+          continue
+        }
+        val updatedNotes = if (existingNotes.isNotBlank()) {
+          "$existingNotes | لم يتم تسجيل الخروج في هذا اليوم (تم إنهاء اليوم تلقائياً)"
+        } else {
+          "لم يتم تسجيل الخروج في هذا اليوم (تم إنهاء اليوم تلقائياً)"
+        }
+
+        val updated = rec.copy(
+          status = AttendanceStatus.CHECKED_OUT,
+          notes = updatedNotes,
+          isEarlyDeparture = false,
+        )
+        dao.insertAttendance(updated)
+        try {
+          CloudSyncService.syncAttendanceRecordToFirestore(updated)
+        } catch (_: Exception) {}
+
+        closedRecords.add(updated)
+        onNotifyAdmin?.invoke(updated.workerName, updated.workDate, updated.checkInTime)
+        onNotifyWorker?.invoke(updated.workerName, updated.workDate)
+      }
+    }
+    return closedRecords
+  }
+
   // WorkSite CRUD
   suspend fun addWorkSite(site: WorkSite) {
     dao.insertWorkSite(site)
@@ -660,19 +709,29 @@ class AttendanceRepository(
 
   suspend fun getUserByUsername(username: String): com.example.data.model.UserAccount? = dao.getUserByUsername(username)
 
+  suspend fun getUserByWorkerId(workerId: String): com.example.data.model.UserAccount? = dao.getUserByWorkerId(workerId)
+
   suspend fun addUser(user: com.example.data.model.UserAccount) {
     dao.insertUser(user)
     CloudSyncService.syncUserToFirestore(user)
   }
 
   suspend fun updateUser(user: com.example.data.model.UserAccount) {
-    dao.updateUser(user)
+    dao.insertUser(user)
     CloudSyncService.syncUserToFirestore(user)
   }
 
   suspend fun deleteUser(username: String) {
     dao.deleteUserByUsername(username)
     CloudSyncService.deleteUserFromFirestore(username)
+  }
+
+  suspend fun deleteUserByWorkerId(workerId: String) {
+    val existing = dao.getUserByWorkerId(workerId)
+    if (existing != null) {
+      dao.deleteUserByUsername(existing.username)
+      CloudSyncService.deleteUserFromFirestore(existing.username)
+    }
   }
 
   suspend fun resetUserDeviceBinding(username: String) {
@@ -941,5 +1000,12 @@ class AttendanceRepository(
 
   suspend fun resolveDeviceAlert(id: Long) {
     dao.resolveDeviceAlert(id)
+  }
+
+  suspend fun updateAttendanceRecord(record: AttendanceRecord) {
+    dao.updateAttendance(record)
+    try {
+      CloudSyncService.syncAttendanceRecordToFirestore(record)
+    } catch (_: Exception) {}
   }
 }
