@@ -203,7 +203,7 @@ object CloudSyncService {
         val db = getAuthenticatedDb() ?: return@withContext false
         val sanitizedWorker = record.workerName.trim().replace(Regex("[^a-zA-Z0-9_ء-ي]"), "_")
         val docId = if (sanitizedWorker.isNotBlank()) {
-          "${record.workDate}_${sanitizedWorker}_${record.id}"
+          "${record.workDate}_${sanitizedWorker}"
         } else {
           "${record.workDate}_${record.id}"
         }

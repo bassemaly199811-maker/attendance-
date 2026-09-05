@@ -102,9 +102,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.bounceClick
+import com.example.ui.components.BentoDatePickerField
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.data.model.AttendanceRecord
@@ -1434,23 +1436,13 @@ fun AddManualAttendanceDialog(
           }
         }
 
-        // Work Date
-        Text(text = "Work Date (YYYY-MM-DD) *", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-        OutlinedTextField(
+        // Work Date (Calendar Picker with No Manual Free Typing)
+        BentoDatePickerField(
           value = workDate,
           onValueChange = { workDate = it },
-          leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = BentoBluePrimary, modifier = Modifier.size(18.dp)) },
+          label = "Work Date (تاريخ العمل)",
+          isRequired = true,
           modifier = Modifier.fillMaxWidth(),
-          shape = RoundedCornerShape(10.dp),
-          colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.Black,
-            unfocusedTextColor = Color.Black,
-            focusedBorderColor = BentoBluePrimary,
-            unfocusedBorderColor = BentoOutline,
-            focusedContainerColor = BentoTileGray,
-            unfocusedContainerColor = BentoTileGray,
-          ),
-          singleLine = true,
         )
 
         // Check-in Time
@@ -1615,25 +1607,25 @@ fun BentoHistoryCard(
         !noteStr.contains("لم يتم تسجيل الخروج") &&
         !noteStr.contains("Auto-Closed", ignoreCase = true)
       ) {
-        if (record.isLate) Triple("Late Arrival (Active)", BentoWarning, BentoWarningContainer)
-        else Triple("Currently Active", BentoBluePrimary, BentoBlueContainer)
+        if (record.isLate) Triple("Late (Active)", BentoWarning, BentoWarningContainer)
+        else Triple("Active", BentoBluePrimary, BentoBlueContainer)
       } else {
-        if (record.isLate) Triple("Incomplete (Late / No Exit)", BentoError, BentoErrorContainer)
-        else Triple("Incomplete (No Check-Out)", BentoError, BentoErrorContainer)
+        if (record.isLate) Triple("Incomplete (Late)", BentoError, BentoErrorContainer)
+        else Triple("Incomplete", BentoError, BentoErrorContainer)
       }
     }
 
     record.isLate && record.isEarlyDeparture ->
-      Triple("Late & Early Exit", BentoError, BentoErrorContainer)
+      Triple("Late & Early", BentoError, BentoErrorContainer)
 
     record.isLate ->
-      Triple("Late Arrival", BentoWarning, BentoWarningContainer)
+      Triple("Late", BentoWarning, BentoWarningContainer)
 
     record.isEarlyDeparture ->
-      Triple("Early Departure", BentoWarning, BentoWarningContainer)
+      Triple("Early Exit", BentoWarning, BentoWarningContainer)
 
     else ->
-      Triple("Completed On Time", BentoSuccess, BentoSuccessContainer)
+      Triple("On Time", BentoSuccess, BentoSuccessContainer)
   }
 
 
@@ -1659,7 +1651,7 @@ fun BentoHistoryCard(
       ) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.weight(1f, fill = false),
+          modifier = Modifier.weight(1f),
         ) {
           Box(
             modifier =
@@ -1677,12 +1669,14 @@ fun BentoHistoryCard(
             )
           }
           Spacer(modifier = Modifier.width(10.dp))
-          Column {
+          Column(modifier = Modifier.weight(1f, fill = false)) {
             Text(
               text = empName,
-              fontSize = 15.sp,
+              fontSize = 14.5.sp,
               fontWeight = FontWeight.Bold,
               color = Color.Black,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
               Icon(
@@ -1694,13 +1688,17 @@ fun BentoHistoryCard(
               Spacer(modifier = Modifier.width(4.dp))
               Text(
                 text = formattedDate,
-                fontSize = 11.5.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = BentoTextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
               )
             }
           }
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
           Surface(
@@ -1710,9 +1708,10 @@ fun BentoHistoryCard(
             Text(
               text = statusLabel,
               modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-              fontSize = 11.5.sp,
+              fontSize = 11.sp,
               fontWeight = FontWeight.Bold,
               color = statusColor,
+              maxLines = 1,
             )
           }
 

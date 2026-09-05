@@ -1,5 +1,14 @@
 package com.example.ui.components
 
+import android.app.DatePickerDialog
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material.icons.filled.CalendarToday
 import com.example.BuildConfig
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
@@ -107,7 +116,6 @@ import com.example.ui.theme.BentoTextSecondary
 import com.example.ui.theme.BentoTileGray
 import com.example.ui.theme.BentoTileLight
 import com.example.ui.theme.BentoWarning
-import java.util.Locale
 import com.example.ui.viewmodel.BentoTab
 
 /**
@@ -2099,5 +2107,99 @@ fun CheckInSuccessDialog(
     containerColor = Color.White,
   )
 }
+
+@Composable
+fun BentoDatePickerField(
+  value: String,
+  onValueChange: (String) -> Unit,
+  label: String,
+  modifier: Modifier = Modifier,
+  placeholder: String = "YYYY-MM-DD",
+  isRequired: Boolean = false,
+  enabled: Boolean = true,
+  iconTint: Color = BentoBluePrimary,
+) {
+  val context = LocalContext.current
+  val interactionSource = remember { MutableInteractionSource() }
+
+  fun openPicker() {
+    if (!enabled) return
+    val cal = Calendar.getInstance()
+    try {
+      if (value.isNotBlank() && value != "Not Set") {
+        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).parse(value.trim())
+        if (parsed != null) cal.time = parsed
+      }
+    } catch (_: Exception) {}
+
+    DatePickerDialog(
+      context,
+      { _, year, month, dayOfMonth ->
+        val selected = String.format(Locale.ENGLISH, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
+        onValueChange(selected)
+      },
+      cal.get(Calendar.YEAR),
+      cal.get(Calendar.MONTH),
+      cal.get(Calendar.DAY_OF_MONTH),
+    ).show()
+  }
+
+  Box(modifier = modifier) {
+    OutlinedTextField(
+      value = value,
+      onValueChange = {}, // Read-only to prevent manual typo entry
+      readOnly = true,
+      enabled = enabled,
+      label = {
+        Text(
+          text = if (isRequired) "$label *" else label,
+          fontSize = 10.sp,
+          color = Color.Black,
+          fontWeight = FontWeight.SemiBold,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      },
+      placeholder = { Text(placeholder, fontSize = 10.sp, color = Color.DarkGray) },
+      leadingIcon = {
+        Icon(
+          imageVector = Icons.Default.CalendarToday,
+          contentDescription = "Pick Date",
+          tint = iconTint,
+          modifier = Modifier.size(16.dp),
+        )
+      },
+      textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+      colors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.Black,
+        unfocusedTextColor = Color.Black,
+        disabledTextColor = Color.Black,
+        focusedLabelColor = Color.Black,
+        unfocusedLabelColor = Color.Black,
+        disabledLabelColor = Color.DarkGray,
+        focusedBorderColor = BentoBluePrimary,
+        unfocusedBorderColor = Color(0xFFCCCCCC),
+        disabledBorderColor = Color(0xFFDDDDDD),
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White,
+        disabledContainerColor = BentoTileGray,
+      ),
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth(),
+    )
+
+    // Transparent click overlay to ensure the entire field area captures clicks reliably
+    Box(
+      modifier = Modifier
+        .matchParentSize()
+        .clickable(
+          interactionSource = interactionSource,
+          indication = null,
+          onClick = { openPicker() }
+        )
+    )
+  }
+}
+
 
 

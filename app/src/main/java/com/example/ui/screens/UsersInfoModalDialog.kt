@@ -32,6 +32,7 @@ import com.example.data.model.*
 import com.example.service.CloudSyncService
 import com.example.ui.theme.*
 import com.example.ui.components.EditWorkerLeaveBalanceDialog
+import com.example.ui.components.BentoDatePickerField
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
@@ -2628,20 +2629,16 @@ private fun EditWorkerDocumentsDialog(
         )
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          OutlinedTextField(
+          BentoDatePickerField(
             value = iqamaStart,
             onValueChange = { iqamaStart = it },
-            label = { Text("Start (YYYY-MM-DD)", fontSize = 10.sp, color = Color.Black) },
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
-            singleLine = true,
+            label = "Start Date",
             modifier = Modifier.weight(1f),
           )
-          OutlinedTextField(
+          BentoDatePickerField(
             value = iqamaEnd,
             onValueChange = { iqamaEnd = it },
-            label = { Text("End (YYYY-MM-DD)", fontSize = 10.sp, color = Color.Black) },
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
-            singleLine = true,
+            label = "End Date",
             modifier = Modifier.weight(1f),
           )
         }
@@ -2666,20 +2663,16 @@ private fun EditWorkerDocumentsDialog(
         )
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          OutlinedTextField(
+          BentoDatePickerField(
             value = insStart,
             onValueChange = { insStart = it },
-            label = { Text("Start (YYYY-MM-DD)", fontSize = 10.sp, color = Color.Black) },
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
-            singleLine = true,
+            label = "Start Date",
             modifier = Modifier.weight(1f),
           )
-          OutlinedTextField(
+          BentoDatePickerField(
             value = insEnd,
             onValueChange = { insEnd = it },
-            label = { Text("End (YYYY-MM-DD)", fontSize = 10.sp, color = Color.Black) },
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
-            singleLine = true,
+            label = "End Date",
             modifier = Modifier.weight(1f),
           )
         }
@@ -2705,12 +2698,10 @@ private fun EditWorkerDocumentsDialog(
           )
         }
 
-        OutlinedTextField(
+        BentoDatePickerField(
           value = contractEnd,
           onValueChange = { contractEnd = it },
-          label = { Text("Contract End Date (YYYY-MM-DD)", fontSize = 11.sp, color = Color.Black) },
-          colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
-          singleLine = true,
+          label = "Contract End Date",
           modifier = Modifier.fillMaxWidth(),
         )
 
@@ -2727,20 +2718,16 @@ private fun EditWorkerDocumentsDialog(
         )
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          OutlinedTextField(
+          BentoDatePickerField(
             value = hireDate,
             onValueChange = { hireDate = it },
-            label = { Text("Hire Date (YYYY-MM-DD)", fontSize = 10.sp, color = Color.Black) },
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
-            singleLine = true,
+            label = "Hire Date",
             modifier = Modifier.weight(1f),
           )
-          OutlinedTextField(
+          BentoDatePickerField(
             value = employmentEndDate,
             onValueChange = { employmentEndDate = it },
-            label = { Text("End Date (Optional)", fontSize = 10.sp) },
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
-            singleLine = true,
+            label = "End Date",
             modifier = Modifier.weight(1f),
           )
         }

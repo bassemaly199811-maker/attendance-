@@ -101,6 +101,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.example.util.exportAttendanceToCsv
 import com.example.ui.components.EditWorkerLeaveBalanceDialog
+import com.example.ui.components.BentoDatePickerField
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Alignment
@@ -2860,42 +2861,17 @@ fun EditWorkerDocumentsDialog(
             )
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedTextField(
+              BentoDatePickerField(
                 value = iqamaStart,
                 onValueChange = { iqamaStart = it },
-                label = { Text("Start Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2025-09-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
+                label = "Start Date",
                 modifier = Modifier.weight(1f),
               )
-              OutlinedTextField(
+              BentoDatePickerField(
                 value = iqamaEnd,
                 onValueChange = { iqamaEnd = it },
-                label = { Text("Expiration Date *", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2026-09-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
+                label = "Expiration Date",
+                isRequired = true,
                 modifier = Modifier.weight(1f),
               )
             }
@@ -2956,42 +2932,17 @@ fun EditWorkerDocumentsDialog(
             )
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedTextField(
+              BentoDatePickerField(
                 value = insStart,
                 onValueChange = { insStart = it },
-                label = { Text("Start Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2025-10-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
+                label = "Start Date",
                 modifier = Modifier.weight(1f),
               )
-              OutlinedTextField(
+              BentoDatePickerField(
                 value = insEnd,
                 onValueChange = { insEnd = it },
-                label = { Text("Expiration Date *", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2026-10-01", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
+                label = "Expiration Date",
+                isRequired = true,
                 modifier = Modifier.weight(1f),
               )
             }
@@ -3051,23 +3002,10 @@ fun EditWorkerDocumentsDialog(
               )
             }
 
-            OutlinedTextField(
+            BentoDatePickerField(
               value = contractEnd,
               onValueChange = { contractEnd = it },
-              label = { Text("Contract End Date", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-              placeholder = { Text("2027-09-01", fontSize = 10.sp, color = Color.DarkGray) },
-              textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Medium),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedLabelColor = Color.Black,
-                unfocusedLabelColor = Color.Black,
-                focusedBorderColor = BentoBluePrimary,
-                unfocusedBorderColor = Color(0xFFCCCCCC),
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-              ),
-              singleLine = true,
+              label = "Contract End Date",
               modifier = Modifier.fillMaxWidth(),
             )
           }
@@ -3108,42 +3046,16 @@ fun EditWorkerDocumentsDialog(
             )
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              OutlinedTextField(
+              BentoDatePickerField(
                 value = hireDate,
                 onValueChange = { hireDate = it },
-                label = { Text("Hire Date", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("2023-01-15", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
+                label = "Hire Date",
                 modifier = Modifier.weight(1f),
               )
-              OutlinedTextField(
+              BentoDatePickerField(
                 value = employmentEndDate,
                 onValueChange = { employmentEndDate = it },
-                label = { Text("End of Employment", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                placeholder = { Text("Optional", fontSize = 10.sp, color = Color.DarkGray) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
+                label = "End of Employment",
                 modifier = Modifier.weight(1f),
               )
             }
@@ -3587,42 +3499,16 @@ fun WorkerFormDialog(
               )
 
               Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                BentoDatePickerField(
                   value = iqamaStartDate,
                   onValueChange = { iqamaStartDate = it },
-                  label = { Text("Issue Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                  placeholder = { Text("2025-09-01", fontSize = 9.5.sp, color = Color.DarkGray) },
-                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
-                  colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedLabelColor = Color.Black,
-                    unfocusedLabelColor = Color.Black,
-                    focusedBorderColor = BentoBluePrimary,
-                    unfocusedBorderColor = Color(0xFFCCCCCC),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                  ),
-                  singleLine = true,
+                  label = "Issue Date",
                   modifier = Modifier.weight(1f),
                 )
-                OutlinedTextField(
+                BentoDatePickerField(
                   value = iqamaEndDate,
                   onValueChange = { iqamaEndDate = it },
-                  label = { Text("Expiry Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                  placeholder = { Text("2026-09-01", fontSize = 9.5.sp, color = Color.DarkGray) },
-                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
-                  colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedLabelColor = Color.Black,
-                    unfocusedLabelColor = Color.Black,
-                    focusedBorderColor = BentoBluePrimary,
-                    unfocusedBorderColor = Color(0xFFCCCCCC),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                  ),
-                  singleLine = true,
+                  label = "Expiry Date",
                   modifier = Modifier.weight(1f),
                 )
               }
@@ -3683,42 +3569,16 @@ fun WorkerFormDialog(
               )
 
               Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                BentoDatePickerField(
                   value = insuranceStartDate,
                   onValueChange = { insuranceStartDate = it },
-                  label = { Text("Start Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                  placeholder = { Text("2025-10-01", fontSize = 9.5.sp, color = Color.DarkGray) },
-                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
-                  colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedLabelColor = Color.Black,
-                    unfocusedLabelColor = Color.Black,
-                    focusedBorderColor = BentoBluePrimary,
-                    unfocusedBorderColor = Color(0xFFCCCCCC),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                  ),
-                  singleLine = true,
+                  label = "Start Date",
                   modifier = Modifier.weight(1f),
                 )
-                OutlinedTextField(
+                BentoDatePickerField(
                   value = insuranceEndDate,
                   onValueChange = { insuranceEndDate = it },
-                  label = { Text("Expiry Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                  placeholder = { Text("2026-10-01", fontSize = 9.5.sp, color = Color.DarkGray) },
-                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
-                  colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedLabelColor = Color.Black,
-                    unfocusedLabelColor = Color.Black,
-                    focusedBorderColor = BentoBluePrimary,
-                    unfocusedBorderColor = Color(0xFFCCCCCC),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                  ),
-                  singleLine = true,
+                  label = "Expiry Date",
                   modifier = Modifier.weight(1f),
                 )
               }
@@ -3778,22 +3638,10 @@ fun WorkerFormDialog(
                 )
               }
 
-              OutlinedTextField(
+              BentoDatePickerField(
                 value = contractEndDate,
                 onValueChange = { contractEndDate = it },
-                label = { Text("Contract End Date", fontSize = 10.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 12.5.sp, fontWeight = FontWeight.Medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = Color.Black,
-                  unfocusedTextColor = Color.Black,
-                  focusedLabelColor = Color.Black,
-                  unfocusedLabelColor = Color.Black,
-                  focusedBorderColor = BentoBluePrimary,
-                  unfocusedBorderColor = Color(0xFFCCCCCC),
-                  focusedContainerColor = Color.White,
-                  unfocusedContainerColor = Color.White,
-                ),
-                singleLine = true,
+                label = "Contract End Date",
                 modifier = Modifier.fillMaxWidth(),
               )
             }
@@ -3834,42 +3682,16 @@ fun WorkerFormDialog(
               )
 
               Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                BentoDatePickerField(
                   value = hireDate,
                   onValueChange = { hireDate = it },
-                  label = { Text("Hire Date", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                  placeholder = { Text("2024-01-01", fontSize = 9.5.sp, color = Color.DarkGray) },
-                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
-                  colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedLabelColor = Color.Black,
-                    unfocusedLabelColor = Color.Black,
-                    focusedBorderColor = BentoBluePrimary,
-                    unfocusedBorderColor = Color(0xFFCCCCCC),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                  ),
-                  singleLine = true,
+                  label = "Hire Date",
                   modifier = Modifier.weight(1f),
                 )
-                OutlinedTextField(
+                BentoDatePickerField(
                   value = employmentEndDate,
                   onValueChange = { employmentEndDate = it },
-                  label = { Text("Employment End", fontSize = 9.5.sp, color = Color.Black, fontWeight = FontWeight.SemiBold) },
-                  placeholder = { Text("Optional", fontSize = 9.5.sp, color = Color.DarkGray) },
-                  textStyle = androidx.compose.ui.text.TextStyle(color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
-                  colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedLabelColor = Color.Black,
-                    unfocusedLabelColor = Color.Black,
-                    focusedBorderColor = BentoBluePrimary,
-                    unfocusedBorderColor = Color(0xFFCCCCCC),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                  ),
-                  singleLine = true,
+                  label = "Employment End",
                   modifier = Modifier.weight(1f),
                 )
               }

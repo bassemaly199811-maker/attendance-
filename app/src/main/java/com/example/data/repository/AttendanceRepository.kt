@@ -275,8 +275,8 @@ class AttendanceRepository(
     // 1. Strict Internet Connection Check
     if (!isOnline) {
       return AttendanceResult.NoInternetError(
-        message = "No internet connection",
-        guidance = "An active internet connection is required to sync attendance data with Firebase. Please connect to Wi-Fi or mobile data.",
+        message = "No Internet Connection (مطلوب اتصال بالإنترنت)",
+        guidance = "An active internet connection is strictly required to record and verify attendance with Firebase Cloud. Offline attendance recording is disabled.",
       )
     }
 
@@ -403,6 +403,21 @@ class AttendanceRepository(
         lastActionTimestampMillis = nowMillis,
       )
 
+    // 10. Direct Cloud Upload to Firebase FIRST (Strict Online-Only Operation)
+    val isCloudSynced = try {
+      CloudSyncService.syncAttendanceRecordToFirestore(record)
+    } catch (e: Exception) {
+      false
+    }
+
+    if (!isCloudSynced) {
+      return AttendanceResult.NoInternetError(
+        message = "Cloud Upload Failed (فشل المزامنة السحابية)",
+        guidance = "Unable to record attendance on Firebase Cloud. Please ensure a stable internet connection and try again.",
+      )
+    }
+
+    // 11. Once confirmed by Cloud, cache locally in Room DB for fast UI retrieval
     val recordId = dao.insertAttendance(record)
     val savedRecord = record.copy(id = recordId)
 
@@ -417,14 +432,11 @@ class AttendanceRepository(
         workerName = profile.fullName,
       )
     dao.insertActivityLog(log)
-
-    // Sync in background to Firebase Firestore
     try {
-      CloudSyncService.syncAttendanceRecordToFirestore(savedRecord)
       CloudSyncService.syncActivityLogToFirestore(log)
     } catch (_: Exception) {}
 
-    return AttendanceResult.Success("Check-in for (${profile.fullName}) synced to cloud successfully!", savedRecord)
+    return AttendanceResult.Success("Check-in for (${profile.fullName}) recorded and synced to cloud successfully! ✓", savedRecord)
   }
 
   suspend fun processCheckOut(
@@ -449,8 +461,8 @@ class AttendanceRepository(
     // 1. Strict Internet Check
     if (!isOnline) {
       return AttendanceResult.NoInternetError(
-        message = "No internet connection",
-        guidance = "An active internet connection is required to sync check-out data with Firebase. Please connect to internet first.",
+        message = "No Internet Connection (مطلوب اتصال بالإنترنت)",
+        guidance = "An active internet connection is strictly required to verify and record check-out with Firebase Cloud. Offline operations are disabled.",
       )
     }
 
@@ -556,6 +568,21 @@ class AttendanceRepository(
         lastActionTimestampMillis = nowMillis,
       )
 
+    // 5. Direct Cloud Upload to Firebase FIRST (Strict Online-Only Operation)
+    val isCloudSynced = try {
+      CloudSyncService.syncAttendanceRecordToFirestore(updatedRecord)
+    } catch (e: Exception) {
+      false
+    }
+
+    if (!isCloudSynced) {
+      return AttendanceResult.NoInternetError(
+        message = "Cloud Upload Failed (فشل المزامنة السحابية)",
+        guidance = "Unable to record check-out on Firebase Cloud. Please verify your internet connection and try again.",
+      )
+    }
+
+    // 6. Once confirmed by Cloud, cache updated record locally in Room DB
     dao.updateAttendance(updatedRecord)
     val log =
       ActivityLog(
@@ -568,14 +595,11 @@ class AttendanceRepository(
         workerName = profile.fullName,
       )
     dao.insertActivityLog(log)
-
-    // Sync in background to Firebase Firestore
     try {
-      CloudSyncService.syncAttendanceRecordToFirestore(updatedRecord)
       CloudSyncService.syncActivityLogToFirestore(log)
     } catch (_: Exception) {}
 
-    val successMsg = if (isEarlyDeparture) "Early check-out for (${profile.fullName}) confirmed and synced to cloud ✓" else "Check-out for (${profile.fullName}) synced to cloud successfully!"
+    val successMsg = if (isEarlyDeparture) "Early check-out for (${profile.fullName}) recorded and synced to cloud successfully! ✓" else "Check-out for (${profile.fullName}) recorded and synced to cloud successfully! ✓"
     return AttendanceResult.Success(successMsg, updatedRecord)
   }
 
